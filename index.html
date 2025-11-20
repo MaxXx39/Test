@@ -6,18 +6,19 @@
     <title>Projet Noël Mystère</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* CSS inchangé pour cette version */
-        body { margin: 0; padding: 0; background-color: #e0e0e0; font-family: sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; }
+        
+        /* --- INTERFACE --- */
         
         #top-panel {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            width: 90%; background: white; border: 2px solid #007bff; /* Bordure bleue assortie à la flèche */
+            width: 90%; background: white; border: 2px solid #007bff; 
             border-radius: 15px; padding: 15px; z-index: 2000; text-align: center; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: none;
         }
-        #direction-text { font-size: 20px; font-weight: bold; color: #007bff; }
-        #step-dist { font-size: 16px; color: #666; }
+        #direction-text { font-size: 20px; font-weight: bold; color: #007bff; line-height: 1.2; }
+        #step-dist { font-size: 16px; color: #666; margin-top: 5px; }
 
         #bottom-panel {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
@@ -28,17 +29,14 @@
         #fuzzy-distance { font-size: 22px; font-weight: bold; color: #333; margin: 10px 0; }
 
         #start-btn {
-            background: linear-gradient(45deg, #007bff, #0056b3); /* Bouton bleu aussi */
+            background: linear-gradient(45deg, #007bff, #0056b3);
             color: white; border: none;
             padding: 15px 0; font-size: 18px; font-weight: 900; border-radius: 50px;
             cursor: pointer; width: 100%; margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
         }
 
-        #debug-log {
-            font-size: 12px; color: red; margin-top: 10px; font-weight: bold;
-            background: rgba(255,0,0,0.1); padding: 5px; border-radius: 5px; display: none;
-        }
-        #status { font-size: 12px; color: #555; margin-top: 5px; }
+        #status { font-size: 12px; color: #888; margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
@@ -46,114 +44,136 @@
 <div id="map"></div>
 
 <div id="top-panel">
-    <span style="font-size:30px">⬆️</span>
-    <div id="direction-text">...</div>
-    <div id="step-dist">...</div>
+    <span style="font-size:30px" id="arrow-emoji">⬆️</span>
+    <div id="direction-text">Calcul...</div>
+    <div id="step-dist">-- m</div>
 </div>
 
 <div id="bottom-panel">
-    <div style="font-size:12px; text-transform:uppercase; color:#888;">Destination Mystère</div>
+    <div style="font-size:12px; text-transform:uppercase; color:#999; letter-spacing:1px;">Destination Mystère</div>
     <div id="fuzzy-distance">??? km</div>
 
     <div id="start-container">
         <button id="start-btn" onclick="startNavigation()">Démarrer le GPS</button>
     </div>
     
-    <div id="status">En attente d'action...</div>
-    <div id="debug-log"></div>
+    <div id="status">En attente...</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     // --- CONFIGURATION ---
     const destination = { lat: 46.575928, lng: 5.954397 }; 
-    const visibleRouteRadius = 1500;
+    const visibleRouteRadius = 2000; // On voit la ligne sur 2km devant soi (plus confortable)
     const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving/';
     
+    // --- CARTE ---
     var map = L.map('map', { zoomControl: false }).setView([46.5, 5.9], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    // --- CHANGEMENT ICI : NOUVELLE ICONE FLECHE BLEUE ---
+    // --- ICONE FLECHE BLEUE ---
     var arrowIcon = L.icon({
-        // URL d'une flèche de navigation bleue moderne
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', 
-        iconSize: [40, 40], // Taille ajustée
-        iconAnchor: [20, 20] // Ancrée au centre
-        // Note : Cette flèche ne tournera pas avec la boussole du téléphone
-        // car c'est complexe à faire dans un simple navigateur web, mais elle indique la position.
+        iconSize: [40, 40], iconAnchor: [20, 20] 
     });
 
-    var userMarker, routeLine;
-    var fullRouteCoordinates = [];
+    var userMarker = null;
+    var routeLine = null;
+    var allRoutePoints = []; // Stocke tous les points du trajet
     var routeSteps = [];
     var currentStepIndex = 0;
     var lastPosition = null; 
 
-    // --- FONCTIONS DEBUG & UTILITAIRES ---
-    function logDebug(msg, isError = false) {
-        const el = document.getElementById('debug-log');
-        const status = document.getElementById('status');
-        status.innerText = msg;
-        
-        if (isError) {
-            el.style.display = 'block'; el.innerText = "⚠️ " + msg; el.style.color = "red";
-        } else {
-            el.style.display = 'none';
-        }
-        console.log(msg);
-    }
-
+    // --- FONCTIONS UTILITAIRES ---
     function getFuzzyDistanceText(meters) {
         const km = meters / 1000;
-        if (km > 1000) return "> 1000 km";
-        if (km > 750) return "750 - 1000 km";
-        if (km > 500) return "500 - 750 km";
-        if (km > 250) return "250 - 500 km";
-        if (km > 100) return "100 - 250 km";
-        if (km > 50)  return "50 - 100 km";
-        if (km > 20)  return "20 - 50 km";
-        if (km > 10)  return "< 20 km";
-        return "Arrivée proche !";
+        if (km > 1000) return "Plus de 1000 km";
+        if (km > 750) return "Entre 750 et 1000 km";
+        if (km > 500) return "Entre 500 et 750 km";
+        if (km > 250) return "Entre 250 et 500 km";
+        if (km > 100) return "Entre 100 et 250 km";
+        if (km > 50)  return "Entre 50 et 100 km";
+        if (km > 20)  return "Entre 20 et 50 km";
+        if (km > 10)  return "Moins de 20 km";
+        return "Approche Finale ! 🎁";
     }
 
-    // --- DESSIN ROUTE ---
-    function updateVisibleRouteLine(userLat, userLng) {
-        if (!fullRouteCoordinates.length) return;
-        const userLoc = L.latLng(userLat, userLng);
+    function getEmoji(modifier) {
+        if (!modifier) return '⬆️';
+        if (modifier.includes('left')) return modifier.includes('slight') ? '↖️' : '⬅️';
+        if (modifier.includes('right')) return modifier.includes('slight') ? '↗️' : '➡️';
+        if (modifier.includes('uturn')) return '🔄';
+        return '⬆️';
+    }
+
+    function logStatus(msg) {
+        document.getElementById('status').innerText = msg;
+    }
+
+    // --- DESSIN DE LA LIGNE COUPÉE ---
+    function drawVisibleRoute(lat, lng) {
+        // Si on n'a pas encore de route, on ne fait rien
+        if (!allRoutePoints || allRoutePoints.length === 0) return;
+
+        const userLoc = L.latLng(lat, lng);
         const visiblePoints = [];
 
-        for (let i = 0; i < fullRouteCoordinates.length; i++) {
-            const p = fullRouteCoordinates[i];
-            const ptLatLng = L.latLng(p[0], p[1]);
-            if (userLoc.distanceTo(ptLatLng) <= visibleRouteRadius) {
+        // On garde uniquement les points proches de la voiture
+        for (let i = 0; i < allRoutePoints.length; i++) {
+            const p = allRoutePoints[i]; // p est [lat, lng]
+            const pointLoc = L.latLng(p[0], p[1]);
+            
+            if (userLoc.distanceTo(pointLoc) < visibleRouteRadius) {
                 visiblePoints.push(p);
             }
         }
-        if (routeLine) map.removeLayer(routeLine);
-        // Ligne bleue maintenant pour aller avec la flèche
-        routeLine = L.polyline(visiblePoints, { 
-            color: '#007bff', weight: 7, opacity: 0.8, lineCap: 'round' 
-        }).addTo(map);
+
+        // S'il y a des points visibles, on dessine/met à jour la ligne
+        if (visiblePoints.length > 0) {
+            if (routeLine) map.removeLayer(routeLine);
+            
+            routeLine = L.polyline(visiblePoints, { 
+                color: '#007bff', // Bleu
+                weight: 7, 
+                opacity: 0.8, 
+                lineCap: 'round' 
+            }).addTo(map);
+        }
     }
 
-    // --- CALCUL OSRM ---
-    function calculateRoute(lat, lng) {
-        logDebug("Calcul itinéraire en cours...");
+    // --- CALCUL ITINERAIRE ---
+    function fetchRoute(lat, lng) {
+        logStatus("Mise à jour itinéraire...");
+        
+        // Appel simple, sans gestion d'erreur complexe qui fait bugger
         const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
 
         fetch(url)
-            .then(r => { if (!r.ok) throw new Error("Serveur occupé"); return r.json(); })
+            .then(response => response.json())
             .then(data => {
-                if (!data.routes || data.routes.length === 0) { logDebug("Route introuvable", true); return; }
-                const route = data.routes[0];
-                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
-                fullRouteCoordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
-                routeSteps = route.legs[0].steps;
-                updateVisibleRouteLine(lat, lng);
-                updatePanel(lat, lng);
-                logDebug("Route OK. Suivez la ligne bleue !");
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    
+                    // 1. Texte Distance
+                    document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
+
+                    // 2. Sauvegarde des points (Inversion GeoJSON [long,lat] -> Leaflet [lat,long])
+                    allRoutePoints = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                    
+                    // 3. Sauvegarde des étapes
+                    routeSteps = route.legs[0].steps;
+                    
+                    // 4. Dessin immédiat
+                    drawVisibleRoute(lat, lng);
+                    updatePanel(lat, lng);
+
+                    logStatus("Route chargée.");
+                }
             })
-            .catch(e => { logDebug("Erreur Route (Réessayer): " + e.message, true); });
+            .catch(err => {
+                console.error(err);
+                logStatus("Connexion lente... on continue.");
+            });
     }
 
     function updatePanel(lat, lng) {
@@ -162,45 +182,55 @@
         let dist = L.latLng(lat, lng).distanceTo(L.latLng(step.maneuver.location[1], step.maneuver.location[0]));
         
         if (dist < 40 && currentStepIndex < routeSteps.length - 1) {
-            currentStepIndex++; step = routeSteps[currentStepIndex];
+            currentStepIndex++;
+            step = routeSteps[currentStepIndex];
         }
+
         document.getElementById('top-panel').style.display = 'block';
-        document.getElementById('direction-text').innerText = step.maneuver.instruction || "Continuez";
+        document.getElementById('arrow-emoji').innerText = getEmoji(step.maneuver.modifier);
+        document.getElementById('direction-text').innerText = step.maneuver.instruction || "Suivez la ligne bleue";
         document.getElementById('step-dist').innerText = Math.round(dist) + " m";
     }
 
     // --- GPS ---
     function startNavigation() {
         document.getElementById('start-container').style.display = 'none';
-        logDebug("Recherche GPS (Sortez dehors !)...");
-        map.locate({ setView: true, maxZoom: 17, watch: true, enableHighAccuracy: true });
+        logStatus("Recherche position...");
+        map.locate({ setView: true, maxZoom: 16, watch: true, enableHighAccuracy: true });
     }
 
     function onLocationFound(e) {
         const lat = e.latitude;
         const lng = e.longitude;
         
+        // 1. Marker Flèche Bleue
         if (!userMarker) {
-            // UTILISATION DE LA NOUVELLE ICONE ICI (arrowIcon)
             userMarker = L.marker([lat, lng], {icon: arrowIcon, zIndexOffset: 1000}).addTo(map);
-            calculateRoute(lat, lng);
+            // Premier chargement de route
+            fetchRoute(lat, lng);
         } else {
             userMarker.setLatLng([lat, lng]);
         }
         
+        // 2. Centrage
         map.panTo([lat, lng], {animate: true});
-        updateVisibleRouteLine(lat, lng);
+
+        // 3. Mise à jour affichage (Ligne + Panneau)
+        // C'est ici le secret : on redessine la ligne coupée à chaque mouvement GPS
+        drawVisibleRoute(lat, lng);
         updatePanel(lat, lng);
         
-        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 100) {
-            calculateRoute(lat, lng);
+        // 4. Re-télécharger la route complète uniquement si on a beaucoup bougé (pour économiser le serveur)
+        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 500) {
+            fetchRoute(lat, lng);
             lastPosition = L.latLng(lat, lng);
         }
     }
 
     function onLocationError(e) {
-        logDebug("Erreur GPS. Vérifiez les permissions.", true);
+        logStatus("Erreur GPS. Vérifiez l'autorisation.");
         document.getElementById('start-container').style.display = 'block';
+        alert("Le GPS ne répond pas. Vérifiez que la localisation est activée.");
     }
 
     map.on('locationfound', onLocationFound);
