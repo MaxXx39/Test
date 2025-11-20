@@ -6,79 +6,38 @@
     <title>Projet Noël Mystère</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; background-color: black; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; }
         
         /* --- INTERFACE --- */
-        
-        /* Panneau d'instructions (Haut) */
         #top-panel {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #ffd700; /* Or */
-            border-radius: 15px;
-            padding: 15px;
-            z-index: 2000;
-            text-align: center;
-            color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: none;
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #007bff; border-radius: 15px; padding: 15px;
+            z-index: 2000; text-align: center; color: #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: none;
         }
-
         #direction-icon { font-size: 40px; display: block; margin-bottom: 5px; }
-        #direction-text { font-size: 20px; font-weight: bold; color: #ffd700; line-height: 1.2; }
-        #step-dist { font-size: 16px; color: #aaa; margin-top: 5px; }
+        #direction-text { font-size: 20px; font-weight: bold; color: #007bff; line-height: 1.2; }
+        #step-dist { font-size: 16px; color: #666; margin-top: 5px; }
 
-        /* Panneau Global (Bas) */
         #bottom-panel {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 85%;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 25px;
-            z-index: 2000;
-            text-align: center;
-            color: white;
-            border-top: 1px solid #333;
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 85%; background: rgba(255, 255, 255, 0.95); padding: 20px;
+            border-radius: 25px; z-index: 2000; text-align: center; color: #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
         }
 
         h1 { margin: 0 0 10px 0; font-size: 16px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Affichage de la distance restante floue */
-        #fuzzy-distance {
-            font-size: 22px;
-            font-weight: bold;
-            color: #fff;
-            margin: 10px 0;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
-        }
+        #fuzzy-distance { font-size: 22px; font-weight: bold; color: #333; margin: 10px 0; }
 
-        /* Bouton Démarrer */
         #start-btn {
-            background: linear-gradient(45deg, #ffd700, #ffaa00);
-            color: black;
-            border: none;
-            padding: 15px 0;
-            font-size: 18px;
-            font-weight: 900;
-            border-radius: 50px;
-            cursor: pointer;
-            width: 100%;
-            text-transform: uppercase;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
-            margin-top: 10px;
+            background: linear-gradient(45deg, #007bff, #0056b3); color: white;
+            border: none; padding: 15px 0; font-size: 18px; font-weight: 900;
+            border-radius: 50px; cursor: pointer; width: 100%; text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4); margin-top: 10px;
         }
-        #start-btn:active { transform: scale(0.96); }
-
-        #status { font-size: 10px; color: #555; margin-top: 15px; font-style: italic; }
-
+        #status { font-size: 10px; color: #888; margin-top: 15px; font-style: italic; }
     </style>
 </head>
 <body>
@@ -96,10 +55,9 @@
     <div id="fuzzy-distance">??? km</div>
 
     <div id="start-container">
-        <p style="font-size:14px; color:#ccc; margin-bottom:10px;">Activez le GPS pour commencer</p>
-        <button id="start-btn" onclick="startNavigation()">Démarrer l'aventure</button>
+        <p style="font-size:14px; color:#666; margin-bottom:10px;">Activez le GPS pour commencer</p>
+        <button id="start-btn" onclick="askForPermission()">Démarrer l'aventure</button>
     </div>
-    
     <div id="status">En attente...</div>
 </div>
 
@@ -110,30 +68,27 @@
     const brouillardRadius = 1000; 
     const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving/';
     
-    // --- VARIABLES ---
-    var map, userMarker, fogLayer, routeLine;
-    var routeSteps = [];
-    var currentStepIndex = 0;
-    var lastPosition = null; 
-
-    // --- INITIALISATION ---
-    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.5, 5.9], 6);
+    var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.5, 5.9], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    var carIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/3202/3202926.png', 
-        iconSize: [50, 50], iconAnchor: [25, 25]
+    var arrowIcon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', 
+        iconSize: [40, 40], iconAnchor: [20, 20]
     });
     
     L.marker([destination.lat, destination.lng], {
         icon: L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/1139/1139982.png', iconSize: [40, 40], iconAnchor: [20, 40] })
     }).addTo(map);
 
-    // --- LOGIQUE "FLOUE" ETENDUE ---
+    var userMarker, fogLayer, routeLine;
+    var routeSteps = [];
+    var currentStepIndex = 0;
+    var lastPosition = null;
+    var isFallbackMode = false; // Pour savoir si on est en mode "Ligne droite"
+
     function getFuzzyDistanceText(meters) {
         const km = meters / 1000;
-        
-        if (km > 1000) return "Plus de 1000 km"; // Cas extrême
+        if (km > 1000) return "Plus de 1000 km"; 
         if (km > 750) return "Entre 750 et 1000 km";
         if (km > 500) return "Entre 500 et 750 km";
         if (km > 250) return "Entre 250 et 500 km";
@@ -145,7 +100,6 @@
         return "Approche Finale ! 🎁";
     }
 
-    // --- AFFICHAGE ---
     function logStatus(msg) { document.getElementById('status').innerText = msg; }
 
     function updateFog(lat, lng) {
@@ -159,19 +113,78 @@
             hole.push([lat + rLat * Math.cos(rad), lng + rLng * Math.sin(rad)]);
         }
         fogLayer = L.polygon([earth, hole], { 
-            color: 'black', fillColor: '#0f0f0f', fillOpacity: 1, stroke: false, interactive: false 
+            color: 'white', fillColor: '#ffffff', fillOpacity: 0.85, stroke: false, interactive: false 
         }).addTo(map);
     }
 
     function getEmoji(modifier) {
         if (!modifier) return '⬆️';
-        if (modifier.includes('left')) return modifier.includes('slight') ? '↖️' : '⬅️';
-        if (modifier.includes('right')) return modifier.includes('slight') ? '↗️' : '➡️';
-        if (modifier.includes('uturn')) return '🔄';
+        if (modifier.includes('left')) return '↖️';
+        if (modifier.includes('right')) return '↗️';
         return '⬆️';
     }
 
+    // --- PLAN B : MODE BOUSSOLE ---
+    function enableFallbackMode(lat, lng) {
+        isFallbackMode = true;
+        logStatus("Mode Boussole (Serveur Route saturé)");
+        
+        // Calcul distance vol d'oiseau
+        const dist = L.latLng(lat, lng).distanceTo([destination.lat, destination.lng]);
+        document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(dist);
+
+        // Trace une ligne droite pointillée
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline([[lat, lng], [destination.lat, destination.lng]], {
+            color: '#ff3333', weight: 4, opacity: 0.6, dashArray: '10, 10'
+        }).addTo(map);
+
+        // Met à jour le panneau
+        document.getElementById('top-panel').style.display = 'block';
+        document.getElementById('direction-icon').innerText = '🧭';
+        document.getElementById('direction-text').innerText = "Suivez le cap";
+        document.getElementById('step-dist').innerText = "Distance directe";
+
+        if (fogLayer) fogLayer.bringToFront();
+    }
+
+    // --- ROUTAGE STANDARD ---
+    function calculateRoute(lat, lng) {
+        logStatus("Calcul itinéraire...");
+        const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
+
+        fetch(url)
+            .then(r => {
+                if (!r.ok) throw new Error("Erreur serveur");
+                return r.json();
+            })
+            .then(data => {
+                if (!data.routes || data.routes.length === 0) throw new Error("Pas de route");
+
+                isFallbackMode = false;
+                const route = data.routes[0];
+                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
+
+                const geo = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                if (routeLine) map.removeLayer(routeLine);
+                routeLine = L.polyline(geo, { color: '#ff3333', weight: 6, opacity: 0.8, dashArray: '10, 15', lineCap: 'round' }).addTo(map);
+
+                routeSteps = route.legs[0].steps;
+                currentStepIndex = 0;
+
+                if (fogLayer) fogLayer.bringToFront();
+                updatePanel(lat, lng);
+                logStatus("Itinéraire Route OK");
+            })
+            .catch(e => {
+                console.log("Echec route (" + e.message + ") -> Passage en mode boussole");
+                enableFallbackMode(lat, lng);
+            });
+    }
+
     function updatePanel(lat, lng) {
+        if (isFallbackMode) return; // On ne touche pas au panneau si on est en mode boussole
+
         if (routeSteps.length === 0) return;
         let step = routeSteps[currentStepIndex];
         let stepLoc = L.latLng(step.maneuver.location[1], step.maneuver.location[0]);
@@ -190,37 +203,26 @@
         document.getElementById('step-dist').innerText = dist > 1000 ? (dist/1000).toFixed(1) + " km" : Math.round(dist) + " m";
     }
 
-    // --- ROUTAGE ---
-    function calculateRoute(lat, lng) {
-        const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
+    // --- GPS ---
+    function askForPermission() {
+        var btn = document.getElementById('start-btn');
+        btn.innerText = "Autorisation...";
+        if (!navigator.geolocation) { alert("GPS non supporté"); return; }
 
-        fetch(url)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.routes || data.routes.length === 0) return;
-
-                const route = data.routes[0];
-                
-                // 1. Mise à jour de la distance floue
-                const remainingMeters = route.distance;
-                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(remainingMeters);
-
-                // 2. Dessin de la ligne
-                const geo = route.geometry.coordinates.map(c => [c[1], c[0]]);
-                if (routeLine) map.removeLayer(routeLine);
-                routeLine = L.polyline(geo, { color: '#ff3333', weight: 6, opacity: 0.8, dashArray: '10, 15', lineCap: 'round' }).addTo(map);
-
-                // 3. Étapes
-                routeSteps = route.legs[0].steps;
-                currentStepIndex = 0;
-
-                if (fogLayer) fogLayer.bringToFront();
-            })
-            .catch(e => console.log("Erreur route"));
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                btn.innerText = "Démarrage...";
+                startTracking();
+            },
+            function(err) {
+                btn.innerText = "Réessayer";
+                alert("⚠️ Localisation bloquée. Cliquez sur le cadenas 🔒 dans la barre d'adresse pour l'autoriser.");
+            },
+            { enableHighAccuracy: true }
+        );
     }
 
-    // --- GPS ---
-    function startNavigation() {
+    function startTracking() {
         document.getElementById('start-container').style.display = 'none';
         map.locate({ setView: true, maxZoom: 16, watch: true, enableHighAccuracy: true });
     }
@@ -228,26 +230,27 @@
     function onLocationFound(e) {
         const lat = e.latitude;
         const lng = e.longitude;
-        logStatus("Signal GPS OK");
 
         if (!userMarker) {
-            userMarker = L.marker([lat, lng], {icon: carIcon, zIndexOffset: 1000}).addTo(map);
+            userMarker = L.marker([lat, lng], {icon: arrowIcon, zIndexOffset: 1000}).addTo(map);
         } else {
             userMarker.setLatLng([lat, lng]);
         }
         map.panTo([lat, lng], {animate: true, duration: 1.0});
+        
         updateFog(lat, lng);
 
-        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 40) {
+        // Recalcul intelligent : Si on n'a pas de route OU si on a bougé de 100m
+        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 100) {
             calculateRoute(lat, lng);
             lastPosition = L.latLng(lat, lng);
+        } else if (!isFallbackMode) {
+            updatePanel(lat, lng); // Juste mettre à jour la distance de l'étape
         }
-        updatePanel(lat, lng);
     }
 
     function onLocationError(e) {
-        alert("Erreur : Activez la localisation !");
-        document.getElementById('start-container').style.display = 'block';
+        // Silence
     }
 
     map.on('locationfound', onLocationFound);
