@@ -64,9 +64,16 @@
             pointer-events: auto;
             border: none;
             cursor: pointer;
-            transition: transform 0.1s;
+            transition: all 0.3s ease;
+            text-align: center;
+            max-width: 90%;
         }
         .start-btn:active { transform: scale(0.95); }
+        .start-btn.loading {
+            background: #4b5563;
+            box-shadow: none;
+            cursor: wait;
+        }
 
         /* Custom Marker Pulse */
         .user-pulse {
@@ -118,7 +125,7 @@
         </button>
         
         <!-- Manual Sim Button (shown if GPS fails) -->
-        <button id="manual-sim-btn" onclick="forceSimulation()" class="hidden pointer-events-auto bg-gray-800 text-white px-4 py-2 rounded-full text-sm border border-gray-600 shadow-lg">
+        <button id="manual-sim-btn" onclick="forceSimulation()" class="hidden pointer-events-auto bg-gray-800 text-white px-4 py-2 rounded-full text-sm border border-gray-600 shadow-lg transition-colors duration-300">
             <i class="fas fa-robot mr-1"></i> Activer Mode Simulation
         </button>
         
@@ -206,41 +213,115 @@
 
         // --- NAVIGATION LOGIC ---
         document.getElementById('start-btn').addEventListener('click', () => {
-            document.getElementById('start-btn').classList.add('hidden');
-            document.getElementById('nav-panel').style.display = 'block';
-            document.getElementById('stats-panel').classList.remove('hidden');
-            document.getElementById('stats-panel').classList.add('flex');
-            navigationStarted = true;
+            const btn = document.getElementById('start-btn');
+            
+            // Changement d'état visuel : On demande poliment d'attendre
+            btn.classList.remove('animate-bounce');
+            btn.classList.add('loading');
+            btn.innerHTML = '<i class="fas fa-satellite-dish fa-spin mr-2"></i> Activation GPS...<br><span class="text-xs font-normal opacity-80">Veuillez autoriser la localisation</span>';
+            
             startGeolocation();
         });
 
         function startGeolocation() {
             if (isSimulating) {
+                onGpsSuccess({ coords: { latitude: 46.55, longitude: 5.90 } }); // Fake start
                 startSimulation();
                 return;
             }
 
             if ("geolocation" in navigator) {
-                const options = { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 };
+                const options = { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 };
+                
+                // On lance le watchPosition. S'il réussit, on lance l'UI de jeu.
                 navigator.geolocation.watchPosition(
-                    updatePosition,
+                    onGpsSuccess,
                     handleGeoError,
                     options
                 );
             } else {
-                handleGeoError({ message: "Géolocalisation non supportée" });
+                handleGeoError({ code: 0, message: "Géolocalisation non supportée par le navigateur" });
             }
         }
 
+        // Callback de succès séparé pour gérer l'activation de l'UI
+        function onGpsSuccess(position) {
+            // Si c'est la première fois qu'on reçoit une position, on switch l'UI
+            if (!navigationStarted) {
+                navigationStarted = true;
+                
+                // Masquer le bouton start et afficher le HUD
+                document.getElementById('start-btn').classList.add('hidden');
+                document.getElementById('nav-panel').style.display = 'block';
+                document.getElementById('stats-panel').classList.remove('hidden');
+                document.getElementById('stats-panel').classList.add('flex');
+            }
+
+            // Mise à jour normale
+            updatePosition(position);
+        }
+
         function handleGeoError(err) {
-            console.error("Erreur GPS:", err);
-            document.getElementById('instruction-text').innerText = "Signal GPS introuvable";
-            document.getElementById('distance-text').innerText = "Vérifiez l'autorisation";
-            document.getElementById('manual-sim-btn').classList.remove('hidden');
+            // Log detailed error
+            console.error("Erreur GPS détaillée:", {
+                code: err.code,
+                message: err.message
+            });
+
+            let msg = "Signal GPS introuvable";
+            let subMsg = "Essayez le mode simulation";
+
+            // Reset Start Button to allow retry or show error
+            const btn = document.getElementById('start-btn');
+            btn.classList.remove('hidden', 'loading', 'animate-bounce');
+            btn.style.background = '#dc2626'; // Red background
+            btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur GPS';
+
+            // PERMISSION_DENIED (1)
+            if (err.code === 1) {
+                msg = "Accès GPS refusé";
+                subMsg = "Activez la localisation dans les réglages";
+                btn.innerHTML = '<i class="fas fa-lock mr-2"></i> Accès refusé<br><span class="text-xs">Vérifiez vos réglages</span>';
+            }
+            // POSITION_UNAVAILABLE (2)
+            else if (err.code === 2) {
+                msg = "Position indisponible";
+                subMsg = "Vérifiez votre GPS";
+            }
+            // TIMEOUT (3)
+            else if (err.code === 3) {
+                msg = "Délai d'attente dépassé";
+                subMsg = "Le GPS ne répond pas";
+            }
+
+            // Si l'UI de nav est déjà lancée, on affiche l'erreur en haut
+            if (navigationStarted) {
+                document.getElementById('instruction-text').innerText = msg;
+                document.getElementById('instruction-text').classList.add('text-red-600');
+                document.getElementById('distance-text').innerText = subMsg;
+            }
+            
+            // Toujours afficher le bouton simulation en cas d'erreur
+            const simBtn = document.getElementById('manual-sim-btn');
+            simBtn.classList.remove('hidden');
+            simBtn.classList.remove('bg-gray-800');
+            simBtn.classList.add('bg-red-600', 'animate-pulse', 'hover:bg-red-700'); 
         }
 
         function forceSimulation() {
-            document.getElementById('manual-sim-btn').classList.add('hidden');
+            const simBtn = document.getElementById('manual-sim-btn');
+            simBtn.classList.add('hidden');
+            document.getElementById('start-btn').classList.add('hidden');
+            
+            // Force l'affichage UI si on passe par le bouton manuel
+            document.getElementById('nav-panel').style.display = 'block';
+            document.getElementById('stats-panel').classList.remove('hidden');
+            document.getElementById('stats-panel').classList.add('flex');
+            
+            // Reset Text color
+            document.getElementById('instruction-text').classList.remove('text-red-600');
+            
+            navigationStarted = true;
             isSimulating = true;
             startSimulation();
         }
@@ -468,3 +549,5 @@
     </script>
 </body>
 </html>
+
+
