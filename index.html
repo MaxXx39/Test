@@ -9,7 +9,7 @@
         body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; }
         
-        /* --- INTERFACE --- */
+        /* --- INTERFACE (Style Bleu conservé) --- */
         
         #top-panel {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
@@ -64,22 +64,19 @@
 <script>
     // --- CONFIGURATION ---
     const destination = { lat: 46.575928, lng: 5.954397 }; 
-    const visibleRouteRadius = 2000; // On voit la ligne sur 2km devant soi (plus confortable)
+    const visibleRadius = 2000; // Rayon du cercle clair (2km)
     const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving/';
     
     // --- CARTE ---
     var map = L.map('map', { zoomControl: false }).setView([46.5, 5.9], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    // --- ICONE FLECHE BLEUE ---
-    var arrowIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', 
-        iconSize: [40, 40], iconAnchor: [20, 20] 
-    });
+    var arrowIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', iconSize: [40, 40], iconAnchor: [20, 20] });
 
     var userMarker = null;
     var routeLine = null;
-    var allRoutePoints = []; // Stocke tous les points du trajet
+    var fogLayer = null; // Le calque de brume
+    var allRoutePoints = []; 
     var routeSteps = [];
     var currentStepIndex = 0;
     var lastPosition = null; 
@@ -106,86 +103,81 @@
         return '⬆️';
     }
 
-    function logStatus(msg) {
-        document.getElementById('status').innerText = msg;
+    function logStatus(msg) { document.getElementById('status').innerText = msg; }
+
+    // --- GESTION DE LA BRUME (Fog) ---
+    function updateFog(lat, lng) {
+        if (fogLayer) map.removeLayer(fogLayer);
+
+        // Définition d'un polygone qui couvre toute la terre
+        const earth = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
+        // Définition du trou circulaire autour de la voiture
+        const hole = [];
+        const rLat = visibleRadius / 111320; // Conversion mètres -> degrés de latitude
+        // Correction de la longitude selon la latitude (projection de Mercator)
+        const rLng = visibleRadius / (111320 * Math.cos(lat * Math.PI / 180)); 
+
+        for (let i = 0; i <= 360; i += 5) {
+            const rad = i * (Math.PI / 180);
+            hole.push([lat + rLat * Math.cos(rad), lng + rLng * Math.sin(rad)]);
+        }
+
+        // Création du polygone inversé (Terre - Trou) avec style "Brume Blanche"
+        fogLayer = L.polygon([earth, hole], { 
+            color: 'white',   // Pas de bordure, juste la couleur de remplissage
+            fillColor: '#ffffff', // Remplissage BLANC
+            fillOpacity: 0.8,     // Opacité 80% (brume dense)
+            stroke: false, 
+            interactive: false // La brume ne bloque pas les clics sur la carte
+        }).addTo(map);
+        
+        fogLayer.bringToBack(); // Mettre la brume derrière la ligne de route
     }
 
-    // --- DESSIN DE LA LIGNE COUPÉE ---
+    // --- DESSIN LIGNE ROUTE ---
     function drawVisibleRoute(lat, lng) {
-        // Si on n'a pas encore de route, on ne fait rien
         if (!allRoutePoints || allRoutePoints.length === 0) return;
-
         const userLoc = L.latLng(lat, lng);
         const visiblePoints = [];
-
-        // On garde uniquement les points proches de la voiture
         for (let i = 0; i < allRoutePoints.length; i++) {
-            const p = allRoutePoints[i]; // p est [lat, lng]
-            const pointLoc = L.latLng(p[0], p[1]);
-            
-            if (userLoc.distanceTo(pointLoc) < visibleRouteRadius) {
+            const p = allRoutePoints[i];
+            if (userLoc.distanceTo(L.latLng(p[0], p[1])) < visibleRadius) {
                 visiblePoints.push(p);
             }
         }
-
-        // S'il y a des points visibles, on dessine/met à jour la ligne
         if (visiblePoints.length > 0) {
             if (routeLine) map.removeLayer(routeLine);
-            
             routeLine = L.polyline(visiblePoints, { 
-                color: '#007bff', // Bleu
-                weight: 7, 
-                opacity: 0.8, 
-                lineCap: 'round' 
+                color: '#007bff', weight: 7, opacity: 0.9, lineCap: 'round' 
             }).addTo(map);
+            routeLine.bringToFront(); // S'assurer que la route est sur la brume
         }
     }
 
-    // --- CALCUL ITINERAIRE ---
+    // --- ITINERAIRE ---
     function fetchRoute(lat, lng) {
         logStatus("Mise à jour itinéraire...");
-        
-        // Appel simple, sans gestion d'erreur complexe qui fait bugger
         const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
-
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0];
-                    
-                    // 1. Texte Distance
-                    document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
-
-                    // 2. Sauvegarde des points (Inversion GeoJSON [long,lat] -> Leaflet [lat,long])
-                    allRoutePoints = route.geometry.coordinates.map(c => [c[1], c[0]]);
-                    
-                    // 3. Sauvegarde des étapes
-                    routeSteps = route.legs[0].steps;
-                    
-                    // 4. Dessin immédiat
-                    drawVisibleRoute(lat, lng);
-                    updatePanel(lat, lng);
-
-                    logStatus("Route chargée.");
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                logStatus("Connexion lente... on continue.");
-            });
+        fetch(url).then(r => r.json()).then(data => {
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
+                allRoutePoints = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                routeSteps = route.legs[0].steps;
+                drawVisibleRoute(lat, lng);
+                updatePanel(lat, lng);
+                logStatus("Route chargée.");
+            }
+        }).catch(err => { console.error(err); logStatus("Connexion lente..."); });
     }
 
     function updatePanel(lat, lng) {
         if (!routeSteps.length) return;
         let step = routeSteps[currentStepIndex];
         let dist = L.latLng(lat, lng).distanceTo(L.latLng(step.maneuver.location[1], step.maneuver.location[0]));
-        
         if (dist < 40 && currentStepIndex < routeSteps.length - 1) {
-            currentStepIndex++;
-            step = routeSteps[currentStepIndex];
+            currentStepIndex++; step = routeSteps[currentStepIndex];
         }
-
         document.getElementById('top-panel').style.display = 'block';
         document.getElementById('arrow-emoji').innerText = getEmoji(step.maneuver.modifier);
         document.getElementById('direction-text').innerText = step.maneuver.instruction || "Suivez la ligne bleue";
@@ -203,24 +195,21 @@
         const lat = e.latitude;
         const lng = e.longitude;
         
-        // 1. Marker Flèche Bleue
+        // 1. Mettre à jour la brume autour de la nouvelle position
+        updateFog(lat, lng);
+
+        // 2. Gérer le marqueur
         if (!userMarker) {
             userMarker = L.marker([lat, lng], {icon: arrowIcon, zIndexOffset: 1000}).addTo(map);
-            // Premier chargement de route
             fetchRoute(lat, lng);
         } else {
             userMarker.setLatLng([lat, lng]);
         }
         
-        // 2. Centrage
         map.panTo([lat, lng], {animate: true});
-
-        // 3. Mise à jour affichage (Ligne + Panneau)
-        // C'est ici le secret : on redessine la ligne coupée à chaque mouvement GPS
         drawVisibleRoute(lat, lng);
         updatePanel(lat, lng);
         
-        // 4. Re-télécharger la route complète uniquement si on a beaucoup bougé (pour économiser le serveur)
         if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 500) {
             fetchRoute(lat, lng);
             lastPosition = L.latLng(lat, lng);
@@ -230,7 +219,7 @@
     function onLocationError(e) {
         logStatus("Erreur GPS. Vérifiez l'autorisation.");
         document.getElementById('start-container').style.display = 'block';
-        alert("Le GPS ne répond pas. Vérifiez que la localisation est activée.");
+        alert("Le GPS ne répond pas.");
     }
 
     map.on('locationfound', onLocationFound);
