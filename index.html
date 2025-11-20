@@ -89,6 +89,13 @@
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
 
+        /* Recenter Button Active State */
+        .recenter-active {
+            color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+            border: 2px solid #3b82f6;
+        }
+
         /* Hide Leaflet controls slightly */
         .leaflet-control-attribution { font-size: 8px; opacity: 0.5; }
     </style>
@@ -135,7 +142,8 @@
                 <div id="total-dist" class="font-bold text-gray-800">-- km</div>
             </div>
             <div class="h-8 w-px bg-gray-200"></div>
-            <button onclick="recenterMap()" class="w-10 h-10 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 active:bg-gray-300 pointer-events-auto">
+            <!-- Recenter Button -->
+            <button id="recenter-btn" onclick="toggleAutoCenter()" class="w-10 h-10 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 active:bg-gray-300 pointer-events-auto transition-colors recenter-active">
                 <i class="fas fa-crosshairs"></i>
             </button>
         </div>
@@ -154,36 +162,45 @@
         let navigationStarted = false;
         let isSimulating = false;
         let simulationInterval;
-        let useCompassMode = false; // Fallback if API fails
+        let useCompassMode = false; 
+        let autoCenter = true; // Centrage automatique activé par défaut
 
         // --- INITIALIZATION ---
         function initMap() {
-            // Centré par défaut sur la France avant localisation
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false
             }).setView([46.5, 5.9], 6);
 
-            // Dark mode tiles for contrast
+            // Styles de carte (Dark pour le contraste avec le brouillard)
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 maxZoom: 19,
                 subdomains: 'abcd'
             }).addTo(map);
 
-            // Initial Fog (Covering everything)
+            // Initial Fog
             drawFog({ lat: 0, lng: 0 }, 0); 
             
-            // Check for secure context (required for geolocation on modern browsers)
+            // Détecter si l'utilisateur bouge la carte manuellement pour désactiver l'auto-centrage
+            map.on('dragstart', () => {
+                if (navigationStarted && autoCenter) {
+                    autoCenter = false;
+                    updateRecenterBtn();
+                }
+            });
+
             if (!window.isSecureContext && location.hostname !== 'localhost' && location.protocol !== 'file:') {
-                alert("Attention : La géolocalisation nécessite une connexion sécurisée (HTTPS). L'application risque de ne pas fonctionner.");
+                alert("Attention : La géolocalisation nécessite une connexion sécurisée (HTTPS).");
             }
         }
 
         // --- FOG OF WAR LOGIC ---
         function drawFog(center, radiusMeters) {
+            // Astuce : On dessine le brouillard APRÈS la route pour que la route disparaisse sous le noir
+            // mais soit visible dans le trou (le cercle clair).
+            
             if (fogLayer) map.removeLayer(fogLayer);
 
-            // Create a polygon that covers the whole world
             const world = [
                 [90, -180],
                 [90, 180],
@@ -191,7 +208,6 @@
                 [-90, -180]
             ];
 
-            // Create the hole (circle around user)
             const hole = [];
             const points = 64;
             const radiusDegLat = radiusMeters / 111320; 
@@ -205,120 +221,80 @@
 
             fogLayer = L.polygon([world, hole], {
                 color: 'transparent',
-                fillColor: '#0f172a', // Dark blue-ish black
-                fillOpacity: 0.95,     // Very opaque
-                interactive: false     // Let clicks pass through
+                fillColor: '#0f172a', 
+                fillOpacity: 0.95,
+                interactive: false,
+                zIndex: 1000 // S'assurer que le brouillard est au-dessus
             }).addTo(map);
         }
 
         // --- NAVIGATION LOGIC ---
         document.getElementById('start-btn').addEventListener('click', () => {
             const btn = document.getElementById('start-btn');
-            
-            // Changement d'état visuel : On demande poliment d'attendre
             btn.classList.remove('animate-bounce');
             btn.classList.add('loading');
             btn.innerHTML = '<i class="fas fa-satellite-dish fa-spin mr-2"></i> Activation GPS...<br><span class="text-xs font-normal opacity-80">Veuillez autoriser la localisation</span>';
-            
             startGeolocation();
         });
 
         function startGeolocation() {
             if (isSimulating) {
-                onGpsSuccess({ coords: { latitude: 46.55, longitude: 5.90 } }); // Fake start
+                onGpsSuccess({ coords: { latitude: 46.55, longitude: 5.90 } });
                 startSimulation();
                 return;
             }
 
             if ("geolocation" in navigator) {
-                const options = { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 };
-                
-                // On lance le watchPosition. S'il réussit, on lance l'UI de jeu.
-                navigator.geolocation.watchPosition(
-                    onGpsSuccess,
-                    handleGeoError,
-                    options
-                );
+                const options = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
+                navigator.geolocation.watchPosition(onGpsSuccess, handleGeoError, options);
             } else {
-                handleGeoError({ code: 0, message: "Géolocalisation non supportée par le navigateur" });
+                handleGeoError({ code: 0, message: "Géolocalisation non supportée" });
             }
         }
 
-        // Callback de succès séparé pour gérer l'activation de l'UI
         function onGpsSuccess(position) {
-            // Si c'est la première fois qu'on reçoit une position, on switch l'UI
             if (!navigationStarted) {
                 navigationStarted = true;
-                
-                // Masquer le bouton start et afficher le HUD
                 document.getElementById('start-btn').classList.add('hidden');
                 document.getElementById('nav-panel').style.display = 'block';
                 document.getElementById('stats-panel').classList.remove('hidden');
                 document.getElementById('stats-panel').classList.add('flex');
             }
-
-            // Mise à jour normale
             updatePosition(position);
         }
 
         function handleGeoError(err) {
-            // Log detailed error
-            console.error("Erreur GPS détaillée:", {
-                code: err.code,
-                message: err.message
-            });
-
+            console.error("Erreur GPS:", err);
             let msg = "Signal GPS introuvable";
             let subMsg = "Essayez le mode simulation";
 
-            // Reset Start Button to allow retry or show error
             const btn = document.getElementById('start-btn');
             btn.classList.remove('hidden', 'loading', 'animate-bounce');
-            btn.style.background = '#dc2626'; // Red background
-            btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur GPS';
-
-            // PERMISSION_DENIED (1)
+            btn.style.background = '#dc2626'; 
+            
             if (err.code === 1) {
                 msg = "Accès GPS refusé";
-                subMsg = "Activez la localisation dans les réglages";
-                btn.innerHTML = '<i class="fas fa-lock mr-2"></i> Accès refusé<br><span class="text-xs">Vérifiez vos réglages</span>';
-            }
-            // POSITION_UNAVAILABLE (2)
-            else if (err.code === 2) {
-                msg = "Position indisponible";
-                subMsg = "Vérifiez votre GPS";
-            }
-            // TIMEOUT (3)
-            else if (err.code === 3) {
-                msg = "Délai d'attente dépassé";
-                subMsg = "Le GPS ne répond pas";
+                btn.innerHTML = '<i class="fas fa-lock mr-2"></i> Accès refusé';
+            } else {
+                btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur GPS';
             }
 
-            // Si l'UI de nav est déjà lancée, on affiche l'erreur en haut
             if (navigationStarted) {
                 document.getElementById('instruction-text').innerText = msg;
                 document.getElementById('instruction-text').classList.add('text-red-600');
-                document.getElementById('distance-text').innerText = subMsg;
             }
             
-            // Toujours afficher le bouton simulation en cas d'erreur
             const simBtn = document.getElementById('manual-sim-btn');
             simBtn.classList.remove('hidden');
-            simBtn.classList.remove('bg-gray-800');
-            simBtn.classList.add('bg-red-600', 'animate-pulse', 'hover:bg-red-700'); 
+            simBtn.classList.add('bg-red-600', 'animate-pulse'); 
         }
 
         function forceSimulation() {
-            const simBtn = document.getElementById('manual-sim-btn');
-            simBtn.classList.add('hidden');
+            document.getElementById('manual-sim-btn').classList.add('hidden');
             document.getElementById('start-btn').classList.add('hidden');
-            
-            // Force l'affichage UI si on passe par le bouton manuel
             document.getElementById('nav-panel').style.display = 'block';
             document.getElementById('stats-panel').classList.remove('hidden');
             document.getElementById('stats-panel').classList.add('flex');
-            
-            // Reset Text color
             document.getElementById('instruction-text').classList.remove('text-red-600');
             
             navigationStarted = true;
@@ -329,39 +305,42 @@
         function updatePosition(position) {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            
             userPos = { lat, lng };
 
-            // Update Map Marker
+            // 1. Update Marker
             if (!userMarker) {
                 const icon = L.divIcon({
                     className: 'user-pulse',
                     iconSize: [20, 20],
                     iconAnchor: [10, 10]
                 });
-                userMarker = L.marker([lat, lng], { icon: icon }).addTo(map);
-                map.setView([lat, lng], 15);
+                userMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 }).addTo(map);
+                map.setView([lat, lng], 16);
             } else {
                 userMarker.setLatLng([lat, lng]);
             }
 
-            // Update Fog
+            // 2. Auto-Centering Logic
+            if (autoCenter) {
+                map.panTo([lat, lng], { animate: true, duration: 0.5 });
+            }
+
+            // 3. Update Fog (Toujours centré sur le joueur)
             drawFog(userPos, FOG_RADIUS);
 
-            // Check Arrival
+            // 4. Check Arrival
             const distToDest = getDistanceFromLatLonInKm(lat, lng, DESTINATION.lat, DESTINATION.lng);
-            if (distToDest < 0.05) { // 50 mètres
+            if (distToDest < 0.05) { 
                 handleArrival();
                 return;
             }
 
-            // Navigation Loop
+            // 5. Route
             if (navigationStarted) {
                 if (useCompassMode) {
                     updateCompassUI(userPos, distToDest);
                 } else {
                     getRoute(userPos).catch(err => {
-                        console.warn("Route failed, switching to compass mode", err);
                         useCompassMode = true;
                         document.getElementById('error-banner').classList.remove('hidden');
                         updateCompassUI(userPos, distToDest);
@@ -371,7 +350,6 @@
         }
 
         async function getRoute(current) {
-            // OSRM Public Demo Server
             const url = `https://router.project-osrm.org/route/v1/driving/${current.lng},${current.lat};${DESTINATION.lng},${DESTINATION.lat}?steps=true&geometries=geojson&overview=full&language=fr`;
 
             const response = await fetch(url, { method: 'GET' });
@@ -383,20 +361,23 @@
                 const route = data.routes[0];
                 const steps = route.legs[0].steps;
                 
-                // Update Polyline
                 const coordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                
+                // Mettre à jour la ligne bleue
                 if (routePolyline) map.removeLayer(routePolyline);
                 
                 routePolyline = L.polyline(coordinates, {
-                    color: '#6366f1',
-                    weight: 6,
-                    opacity: 0.7,
-                    lineCap: 'round'
+                    color: '#6366f1', // Couleur Indigo vif
+                    weight: 8,        // Ligne épaisse
+                    opacity: 0.8,
+                    lineCap: 'round',
+                    lineJoin: 'round'
                 }).addTo(map);
+                
+                // IMPORTANT: Envoyer la route derrière le marqueur mais elle sera coupée par le brouillard
+                routePolyline.bringToBack(); 
 
                 updateUI(route, steps);
-            } else {
-                throw new Error("OSRM API Error code: " + data.code);
             }
         }
 
@@ -404,14 +385,15 @@
             const distKm = (route.distance / 1000).toFixed(1);
             document.getElementById('total-dist').innerText = `${distKm} km`;
             
-            // Reset rotation from compass mode
             document.getElementById('maneuver-icon').style.transform = 'rotate(0deg)';
 
             if (steps.length > 0) {
-                const nextStep = steps[0];
-                // Logic: If close to end of current step, show next one
-                const displayStep = (nextStep.distance < 20 && steps.length > 1) ? steps[1] : nextStep;
-                formatInstruction(displayStep);
+                // Logique améliorée pour afficher la prochaine vraie instruction
+                let nextStep = steps[0];
+                if (nextStep.distance < 30 && steps.length > 1) {
+                    nextStep = steps[1];
+                }
+                formatInstruction(nextStep);
             }
         }
 
@@ -424,17 +406,20 @@
             let text = `Continuez sur ${dist}m`;
             let icon = "fa-arrow-up";
 
-            if (type === 'turn' || type === 'roundabout') {
+            if (type === 'turn' || type === 'roundabout' || type === 'merge') {
                 if (modifier && modifier.includes('left')) {
                     text = `Tournez à Gauche`;
                     icon = "fa-arrow-left";
                 } else if (modifier && modifier.includes('right')) {
                     text = `Tournez à Droite`;
                     icon = "fa-arrow-right";
+                } else if (modifier && modifier.includes('straight')) {
+                    text = `Allez tout droit`;
+                    icon = "fa-arrow-up";
                 }
                 if (name) text += ` vers ${name}`;
             } else if (type === 'arrive') {
-                text = "Vous arrivez à la surprise !";
+                text = "C'est tout près !";
                 icon = "fa-star";
             }
 
@@ -443,26 +428,40 @@
             document.getElementById('maneuver-icon').innerHTML = `<i class="fas ${icon}"></i>`;
         }
 
-        // --- FALLBACK: COMPASS MODE ---
-        // Calculates direct bearing if routing fails
+        // --- UI HELPERS ---
+        function toggleAutoCenter() {
+            autoCenter = !autoCenter;
+            if(autoCenter && userPos) {
+                map.panTo([userPos.lat, userPos.lng], { animate: true });
+            }
+            updateRecenterBtn();
+        }
+
+        function updateRecenterBtn() {
+            const btn = document.getElementById('recenter-btn');
+            if (autoCenter) {
+                btn.classList.add('recenter-active');
+            } else {
+                btn.classList.remove('recenter-active');
+            }
+        }
+
+        function recenterMap() {
+            // Legacy wrapper
+            toggleAutoCenter();
+        }
+
+        // --- FALLBACK COMPASS ---
         function updateCompassUI(current, distKm) {
             document.getElementById('total-dist').innerText = `${distKm.toFixed(1)} km`;
-            
-            // Calculate bearing
             const bearing = getBearing(current.lat, current.lng, DESTINATION.lat, DESTINATION.lng);
-            
-            // We assume user is facing North because we don't have device orientation easily in web
-            // So we just show an arrow pointing absolute North-relative direction
-            // Or better: simple arrow "Direction Cible"
             
             document.getElementById('instruction-text').innerText = "Suivez la flèche";
             document.getElementById('distance-text').innerText = "Direction Vol d'Oiseau";
             
-            // Rotate arrow to point to destination relative to screen up (North)
-            // Note: Ideally we'd use deviceorientation event to rotate map, but here we just give absolute bearing
             const iconContainer = document.getElementById('maneuver-icon');
             iconContainer.innerHTML = `<i class="fas fa-location-arrow"></i>`;
-            iconContainer.style.transform = `rotate(${bearing - 45}deg)`; // -45 because fa-location-arrow points 45deg right by default
+            iconContainer.style.transform = `rotate(${bearing - 45}deg)`;
         }
 
         function getBearing(startLat, startLng, destLat, destLng) {
@@ -470,77 +469,39 @@
             const startLngRad = deg2rad(startLng);
             const destLatRad = deg2rad(destLat);
             const destLngRad = deg2rad(destLng);
-
             const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
-            const x = Math.cos(startLatRad) * Math.sin(destLatRad) -
-                    Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
-            const brng = Math.atan2(y, x);
-            return (rad2deg(brng) + 360) % 360;
+            const x = Math.cos(startLatRad) * Math.sin(destLatRad) - Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+            return (rad2deg(Math.atan2(y, x)) + 360) % 360;
         }
 
         function handleArrival() {
             document.getElementById('instruction-text').innerText = "VOUS ÊTES ARRIVÉS !";
             document.getElementById('instruction-text').classList.add('text-green-600');
             document.getElementById('maneuver-icon').innerHTML = '<i class="fas fa-gift fa-beat"></i>';
-            document.getElementById('maneuver-icon').classList.remove('bg-blue-100', 'text-blue-600');
             document.getElementById('maneuver-icon').classList.add('bg-green-100', 'text-green-600');
-            document.getElementById('maneuver-icon').style.transform = 'none';
-            
-            // Remove Fog
             if (fogLayer) map.removeLayer(fogLayer);
             map.setView([DESTINATION.lat, DESTINATION.lng], 18);
-            
             alert("SURPRISE !!! Regardez autour de vous !");
         }
 
-        function recenterMap() {
-            if (userPos) {
-                map.setView([userPos.lat, userPos.lng], 16);
-            }
-        }
-
-        // --- UTILS ---
         function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-            var R = 6371; 
-            var dLat = deg2rad(lat2-lat1);  
-            var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; 
-            return d;
+            var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
-
         function deg2rad(deg) { return deg * (Math.PI/180); }
         function rad2deg(rad) { return rad * (180/Math.PI); }
 
-        // --- SIMULATION MODE ---
-        function toggleSimulation() {
-            isSimulating = !isSimulating;
-            alert(isSimulating ? "Mode Simulation Prêt. Cliquez sur Commencer." : "Mode Simulation Désactivé");
-        }
-
+        // --- SIMULATION ---
         function startSimulation() {
-            // Start simulation ~5km away
-            let simLat = 46.55; 
-            let simLng = 5.90;
-            
+            let simLat = 46.55; let simLng = 5.90;
             if (simulationInterval) clearInterval(simulationInterval);
-
             simulationInterval = setInterval(() => {
-                // Move towards destination
                 const dLat = (DESTINATION.lat - simLat) * 0.02;
                 const dLng = (DESTINATION.lng - simLng) * 0.02;
-                
-                simLat += dLat;
-                simLng += dLng;
-                
+                simLat += dLat; simLng += dLng;
                 updatePosition({ coords: { latitude: simLat, longitude: simLng } });
-                
-                if (Math.abs(DESTINATION.lat - simLat) < 0.0001) {
-                    clearInterval(simulationInterval);
-                }
+                if (Math.abs(DESTINATION.lat - simLat) < 0.0001) clearInterval(simulationInterval);
             }, 1000);
         }
 
