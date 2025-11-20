@@ -2,216 +2,202 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Voyage Mystère</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mon Appli</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
     <style>
-        body { margin: 0; padding: 0; background-color: black; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; }
-        
-        /* Interface */
-        #info-box {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
+        /* --- RESET & BASE --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            /* Empêche la sélection de texte comme dans une vraie appli */
+            -webkit-tap-highlight-color: transparent;
+            user-select: none; 
+        }
+
+        body {
+            /* Utilise la police par défaut du téléphone (San Francisco sur iPhone, Roboto sur Android) */
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- HEADER (HAUT) --- */
+        header {
+            background-color: #6200ea; /* Couleur principale (Violet) */
             color: white;
-            padding: 20px;
-            border-radius: 20px;
-            z-index: 2000;
+            padding: 15px 20px;
+            padding-top: max(15px, env(safe-area-inset-top)); /* Gestion de l'encoche iPhone */
             text-align: center;
-            border: 2px solid gold;
-            width: 85%;
-            box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
-        }
-        h1 { margin: 0 0 10px 0; font-size: 20px; color: gold; text-transform: uppercase; }
-        p { margin: 0 0 15px 0; font-size: 14px; color: #ddd; }
-        
-        /* Le Bouton Magique */
-        #start-btn {
-            background-color: gold;
-            color: black;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            position: fixed;
+            top: 0;
             width: 100%;
-            text-transform: uppercase;
-            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.5);
+            z-index: 1000;
         }
-        #start-btn:active { transform: scale(0.95); }
+
+        header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        /* --- CONTENU PRINCIPAL --- */
+        main {
+            flex: 1;
+            overflow-y: auto; /* Permet le scroll uniquement ici */
+            padding: 80px 20px 100px 20px; /* Marges pour ne pas être caché par le header/footer */
+        }
+
+        /* Style des "Cartes" de contenu */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        h2 { font-size: 1.1rem; margin-bottom: 10px; color: #6200ea; }
+        p { line-height: 1.5; font-size: 0.95rem; color: #666; margin-bottom: 10px; }
+
+        /* Bouton style appli */
+        button.app-btn {
+            background: #6200ea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            width: 100%;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button.app-btn:active { transform: scale(0.98); }
+
+        /* --- NAVIGATION (BAS) --- */
+        nav {
+            background: white;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            border-top: 1px solid #eee;
+            padding-bottom: env(safe-area-inset-bottom); /* Gestion de la barre iPhone */
+            display: flex;
+            justify-content: space-around;
+            height: 60px;
+            z-index: 1000;
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            text-decoration: none;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .nav-item i {
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+
+        /* État actif */
+        .nav-item.active {
+            color: #6200ea;
+        }
+
+        /* Gestion des Vues (Cacher/Montrer) */
+        .view { display: none; }
+        .view.active { display: block; }
+
     </style>
 </head>
 <body>
 
-<div id="map"></div>
+    <header>
+        <h1 id="page-title">Accueil</h1>
+    </header>
 
-<div id="info-box">
-    <h1>Destination Inconnue</h1>
-    <p id="message">Pour commencer l'aventure, appuyez sur le bouton ci-dessous et autorisez la localisation.</p>
-    <button id="start-btn" onclick="startNavigation()">Démarrer la Navigation</button>
-    <p id="status" style="margin-top:10px; font-size:12px; color:#aaa; display:none;">Recherche GPS...</p>
-</div>
+    <main>
+        <div id="home" class="view active">
+            <div class="card">
+                <h2>Bienvenue !</h2>
+                <p>Ceci est une page web qui se comporte comme une application native.</p>
+                <button class="app-btn" onclick="alert('Action déclenchée !')">Cliquez-moi</button>
+            </div>
+            <div class="card">
+                <h2>Actualités</h2>
+                <p>Le contenu défile derrière la barre de navigation, comme sur Instagram ou Twitter.</p>
+                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+            </div>
+            <div class="card">
+                <h2>Plus de contenu</h2>
+                <p>Ajoutez autant de cartes que vous voulez pour tester le défilement.</p>
+            </div>
+        </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-    // --- CONFIGURATION ---
-    const destination = { lat: 46.575928, lng: 5.954397 }; // Destination finale (Jura)
-    const brouillardRadius = 1000; // Rayon visible en mètres (1km)
-    const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
-    
-    // --- INITIALISATION CARTE ---
-    var map = L.map('map', { zoomControl: false }).setView([46.5, 5.9], 6);
-    
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
+        <div id="search" class="view">
+            <div class="card">
+                <h2>Recherche</h2>
+                <input type="text" placeholder="Rechercher..." style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
+            </div>
+        </div>
 
-    // Icones
-    var carIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/3202/3202926.png',
-        iconSize: [50, 50], iconAnchor: [25, 25]
-    });
-    
-    // Marqueur de destination (caché sous le brouillard, mais prêt)
-    var destIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/1139/1139982.png',
-        iconSize: [40, 40], iconAnchor: [20, 40]
-    });
-    L.marker([destination.lat, destination.lng], {icon: destIcon}).addTo(map);
+        <div id="profile" class="view">
+            <div class="card" style="text-align:center;">
+                <i class="fas fa-user-circle" style="font-size: 3rem; color: #6200ea; margin-bottom:10px;"></i>
+                <h2>Mon Profil</h2>
+                <p>Utilisateur Invité</p>
+                <button class="app-btn" style="background:#ff4081;">Se déconnecter</button>
+            </div>
+        </div>
+    </main>
 
+    <nav>
+        <div class="nav-item active" onclick="changeTab('home', this)">
+            <i class="fas fa-home"></i>
+            <span>Accueil</span>
+        </div>
+        <div class="nav-item" onclick="changeTab('search', this)">
+            <i class="fas fa-search"></i>
+            <span>Recherche</span>
+        </div>
+        <div class="nav-item" onclick="changeTab('profile', this)">
+            <i class="fas fa-user"></i>
+            <span>Profil</span>
+        </div>
+    </nav>
 
-    // Variables de l'application
-    var userMarker = null;
-    var fogLayer = null;
-    var routeLine = null;
-    var lastPosition = null; // Pour éviter le recalcul constant
-    
-    // Mise à jour du message de statut
-    function logStatus(msg) {
-        document.getElementById('status').innerText = msg;
-    }
+    <script>
+        function changeTab(tabId, element) {
+            // 1. Changer le titre
+            const titles = {
+                'home': 'Accueil',
+                'search': 'Recherche',
+                'profile': 'Mon Profil'
+            };
+            document.getElementById('page-title').innerText = titles[tabId];
 
-    // --- BROUILLARD (inchangé) ---
-    function updateFog(lat, lng) {
-        if (fogLayer) map.removeLayer(fogLayer);
-        const earth = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
-        const hole = [];
-        const metersPerDegreeLat = 111320;
-        const metersPerDegreeLng = 111320 * Math.cos(lat * Math.PI / 180);
-        const rLat = brouillardRadius / metersPerDegreeLat;
-        const rLng = brouillardRadius / metersPerDegreeLng;
+            // 2. Cacher toutes les vues et montrer la bonne
+            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
 
-        for (let i = 0; i <= 360; i += 8) {
-            const rad = i * (Math.PI / 180);
-            hole.push([lat + rLat * Math.cos(rad), lng + rLng * Math.sin(rad)]);
+            // 3. Mettre à jour la barre de navigation (couleur active)
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            element.classList.add('active');
         }
-        fogLayer = L.polygon([earth, hole], { color: 'black', fillColor: '#111', fillOpacity: 1, stroke: false, interactive: false }).addTo(map);
-    }
+    </script>
 
-    // --- NOUVELLE FONCTION DE ROUTAGE ---
-    function getAndDrawRoute(currentLat, currentLng) {
-        // OSRM utilise le format Longitude, Latitude pour l'URL
-        const startCoord = `${currentLng},${currentLat}`;
-        const endCoord = `${destination.lng},${destination.lat}`;
-        
-        const url = `${OSRM_URL}${startCoord};${endCoord}?geometries=geojson&overview=full`;
-
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.routes && data.routes.length > 0) {
-                    // Les coordonnées de la route sont en GeoJSON (Lng, Lat)
-                    const routeGeoJSON = data.routes[0].geometry.coordinates;
-                    
-                    // Conversion de [Lng, Lat] (GeoJSON) à [Lat, Lng] (Leaflet)
-                    const routePoints = routeGeoJSON.map(coord => [coord[1], coord[0]]);
-
-                    if (routeLine) {
-                        map.removeLayer(routeLine);
-                    }
-                    
-                    // Dessiner l'itinéraire réel sur la carte
-                    routeLine = L.polyline(routePoints, {
-                        color: '#ff3333', // Rouge vif
-                        weight: 6,
-                        opacity: 0.7,
-                        dashArray: '15, 15', // Pointillés
-                        lineCap: 'round'
-                    }).addTo(map);
-
-                    // S'assurer que le brouillard est au-dessus de la ligne
-                    if(fogLayer) fogLayer.bringToFront(); 
-                    
-                } else {
-                    logStatus("Alerte: Impossible de calculer l'itinéraire routier. Vérifiez la destination.");
-                }
-            })
-            .catch(error => {
-                logStatus("Erreur de connexion au service d'itinéraire.");
-                console.error("Routing error:", error);
-            });
-    }
-
-
-    // --- ACTION DEMARRER ---
-    function startNavigation() {
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('status').style.display = 'block';
-        document.getElementById('message').innerText = "Acceptez la demande de position...";
-
-        map.locate({
-            setView: true, 
-            maxZoom: 15, 
-            watch: true, 
-            enableHighAccuracy: true
-        });
-    }
-
-    // --- SUIVI GPS MIS À JOUR ---
-    function onLocationFound(e) {
-        var lat = e.latitude;
-        var lng = e.longitude;
-        var accuracy = e.accuracy;
-
-        document.getElementById('status').innerText = `Signal GPS Trouvé. Précision: ${Math.round(accuracy)}m`;
-        document.getElementById('message').innerText = "Suivez la ligne rouge sur la route !";
-
-        // 1. Mise à jour de la voiture
-        if (!userMarker) {
-            userMarker = L.marker([lat, lng], {icon: carIcon}).addTo(map);
-            map.setView([lat, lng], 15);
-        } else {
-            userMarker.setLatLng([lat, lng]);
-            map.panTo([lat, lng], {animate: true, duration: 1});
-        }
-
-        // 2. Mise à jour du brouillard
-        updateFog(lat, lng);
-        
-        // 3. Calcul de l'itinéraire (uniquement si première fois ou mouvement significatif)
-        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 50) { // Recalcul si plus de 50m de déplacement
-            getAndDrawRoute(lat, lng);
-            lastPosition = L.latLng(lat, lng);
-        }
-
-        // 4. Assurer l'ordre des couches
-        if(fogLayer) fogLayer.bringToFront();
-        if(userMarker) userMarker.setZIndexOffset(1000); 
-    }
-
-    function onLocationError(e) {
-        document.getElementById('start-btn').style.display = 'block';
-        logStatus("ERREUR : Localisation non trouvée. Vérifiez vos réglages.");
-        alert("Erreur : " + e.message + "\n\nAllez dans les réglages du téléphone > Applications > Chrome > Autorisations > Position et activez-le si nécessaire.");
-    }
-
-    map.on('locationfound', onLocationFound);
-    map.on('locationerror', onLocationError);
-
-</script>
 </body>
 </html>
