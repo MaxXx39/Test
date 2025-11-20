@@ -6,37 +6,78 @@
     <title>Projet Noël Mystère</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; }
         
-        /* --- INTERFACE (Style Bleu conservé) --- */
+        /* --- INTERFACE --- */
         
+        /* Panneau d'instructions (Haut) */
         #top-panel {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            width: 90%; background: white; border: 2px solid #007bff; 
-            border-radius: 15px; padding: 15px; z-index: 2000; text-align: center; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: none;
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            background: rgba(255, 255, 255, 0.95); /* Fond blanc pour le contraste */
+            border: 2px solid #007bff; /* Bleu */
+            border-radius: 15px;
+            padding: 15px;
+            z-index: 2000;
+            text-align: center;
+            color: #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: none;
         }
+
+        #direction-icon { font-size: 40px; display: block; margin-bottom: 5px; }
         #direction-text { font-size: 20px; font-weight: bold; color: #007bff; line-height: 1.2; }
         #step-dist { font-size: 16px; color: #666; margin-top: 5px; }
 
+        /* Panneau Global (Bas) */
         #bottom-panel {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            width: 85%; background: rgba(255, 255, 255, 0.95); padding: 20px;
-            border-radius: 25px; z-index: 2000; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 25px;
+            z-index: 2000;
+            text-align: center;
+            color: #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
         }
 
-        #fuzzy-distance { font-size: 22px; font-weight: bold; color: #333; margin: 10px 0; }
+        h1 { margin: 0 0 10px 0; font-size: 16px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* Affichage de la distance restante floue */
+        #fuzzy-distance {
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+        }
 
+        /* Bouton Démarrer */
         #start-btn {
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            color: white; border: none;
-            padding: 15px 0; font-size: 18px; font-weight: 900; border-radius: 50px;
-            cursor: pointer; width: 100%; margin-top: 10px;
+            background: linear-gradient(45deg, #007bff, #0056b3); /* Bleu */
+            color: white;
+            border: none;
+            padding: 15px 0;
+            font-size: 18px;
+            font-weight: 900;
+            border-radius: 50px;
+            cursor: pointer;
+            width: 100%;
+            text-transform: uppercase;
             box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
+            margin-top: 10px;
         }
+        #start-btn:active { transform: scale(0.96); }
 
-        #status { font-size: 12px; color: #888; margin-top: 10px; font-style: italic; }
+        #status { font-size: 10px; color: #888; margin-top: 15px; font-style: italic; }
+
     </style>
 </head>
 <body>
@@ -44,17 +85,18 @@
 <div id="map"></div>
 
 <div id="top-panel">
-    <span style="font-size:30px" id="arrow-emoji">⬆️</span>
-    <div id="direction-text">Calcul...</div>
-    <div id="step-dist">-- m</div>
+    <span id="direction-icon">⬆️</span>
+    <div id="direction-text">Prêt au départ</div>
+    <div id="step-dist">0 m</div>
 </div>
 
 <div id="bottom-panel">
-    <div style="font-size:12px; text-transform:uppercase; color:#999; letter-spacing:1px;">Destination Mystère</div>
+    <h1>Destination Mystère</h1>
     <div id="fuzzy-distance">??? km</div>
 
     <div id="start-container">
-        <button id="start-btn" onclick="startNavigation()">Démarrer le GPS</button>
+        <p style="font-size:14px; color:#666; margin-bottom:10px;">Activez le GPS pour commencer</p>
+        <button id="start-btn" onclick="startNavigation()">Démarrer l'aventure</button>
     </div>
     
     <div id="status">En attente...</div>
@@ -64,27 +106,34 @@
 <script>
     // --- CONFIGURATION ---
     const destination = { lat: 46.575928, lng: 5.954397 }; 
-    const visibleRadius = 2000; // Rayon du cercle clair (2km)
+    const brouillardRadius = 1000; 
     const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving/';
     
-    // --- CARTE ---
-    var map = L.map('map', { zoomControl: false }).setView([46.5, 5.9], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-
-    var arrowIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', iconSize: [40, 40], iconAnchor: [20, 20] });
-
-    var userMarker = null;
-    var routeLine = null;
-    var fogLayer = null; // Le calque de brume
-    var allRoutePoints = []; 
+    // --- VARIABLES ---
+    var map, userMarker, fogLayer, routeLine;
     var routeSteps = [];
     var currentStepIndex = 0;
     var lastPosition = null; 
 
-    // --- FONCTIONS UTILITAIRES ---
+    // --- INITIALISATION ---
+    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.5, 5.9], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    // Icône flèche bleue
+    var arrowIcon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/6395/6395336.png', 
+        iconSize: [40, 40], 
+        iconAnchor: [20, 20]
+    });
+    
+    L.marker([destination.lat, destination.lng], {
+        icon: L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/1139/1139982.png', iconSize: [40, 40], iconAnchor: [20, 40] })
+    }).addTo(map);
+
+    // --- LOGIQUE "FLOUE" ---
     function getFuzzyDistanceText(meters) {
         const km = meters / 1000;
-        if (km > 1000) return "Plus de 1000 km";
+        if (km > 1000) return "Plus de 1000 km"; 
         if (km > 750) return "Entre 750 et 1000 km";
         if (km > 500) return "Entre 500 et 750 km";
         if (km > 250) return "Entre 250 et 500 km";
@@ -92,7 +141,33 @@
         if (km > 50)  return "Entre 50 et 100 km";
         if (km > 20)  return "Entre 20 et 50 km";
         if (km > 10)  return "Moins de 20 km";
+        if (km > 5)   return "Moins de 10 km";
         return "Approche Finale ! 🎁";
+    }
+
+    // --- AFFICHAGE ---
+    function logStatus(msg) { document.getElementById('status').innerText = msg; }
+
+    // Fonction de mise à jour du BROUILLARD BLANC
+    function updateFog(lat, lng) {
+        if (fogLayer) map.removeLayer(fogLayer);
+        const earth = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
+        const hole = [];
+        const rLat = brouillardRadius / 111320;
+        const rLng = brouillardRadius / (111320 * Math.cos(lat * Math.PI / 180));
+        for (let i = 0; i <= 360; i += 5) {
+            const rad = i * (Math.PI / 180);
+            hole.push([lat + rLat * Math.cos(rad), lng + rLng * Math.sin(rad)]);
+        }
+        
+        // CHANGEMENT ICI : Couleur blanche et semi-transparente
+        fogLayer = L.polygon([earth, hole], { 
+            color: 'white',       // Bordure blanche (invisible car stroke: false)
+            fillColor: '#ffffff', // Remplissage BLANC
+            fillOpacity: 0.85,    // Opacité à 85% pour l'effet "brume" dense
+            stroke: false, 
+            interactive: false 
+        }).addTo(map);
     }
 
     function getEmoji(modifier) {
@@ -103,123 +178,81 @@
         return '⬆️';
     }
 
-    function logStatus(msg) { document.getElementById('status').innerText = msg; }
-
-    // --- GESTION DE LA BRUME (Fog) ---
-    function updateFog(lat, lng) {
-        if (fogLayer) map.removeLayer(fogLayer);
-
-        // Définition d'un polygone qui couvre toute la terre
-        const earth = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
-        // Définition du trou circulaire autour de la voiture
-        const hole = [];
-        const rLat = visibleRadius / 111320; // Conversion mètres -> degrés de latitude
-        // Correction de la longitude selon la latitude (projection de Mercator)
-        const rLng = visibleRadius / (111320 * Math.cos(lat * Math.PI / 180)); 
-
-        for (let i = 0; i <= 360; i += 5) {
-            const rad = i * (Math.PI / 180);
-            hole.push([lat + rLat * Math.cos(rad), lng + rLng * Math.sin(rad)]);
-        }
-
-        // Création du polygone inversé (Terre - Trou) avec style "Brume Blanche"
-        fogLayer = L.polygon([earth, hole], { 
-            color: 'white',   // Pas de bordure, juste la couleur de remplissage
-            fillColor: '#ffffff', // Remplissage BLANC
-            fillOpacity: 0.8,     // Opacité 80% (brume dense)
-            stroke: false, 
-            interactive: false // La brume ne bloque pas les clics sur la carte
-        }).addTo(map);
-        
-        fogLayer.bringToBack(); // Mettre la brume derrière la ligne de route
-    }
-
-    // --- DESSIN LIGNE ROUTE ---
-    function drawVisibleRoute(lat, lng) {
-        if (!allRoutePoints || allRoutePoints.length === 0) return;
-        const userLoc = L.latLng(lat, lng);
-        const visiblePoints = [];
-        for (let i = 0; i < allRoutePoints.length; i++) {
-            const p = allRoutePoints[i];
-            if (userLoc.distanceTo(L.latLng(p[0], p[1])) < visibleRadius) {
-                visiblePoints.push(p);
-            }
-        }
-        if (visiblePoints.length > 0) {
-            if (routeLine) map.removeLayer(routeLine);
-            routeLine = L.polyline(visiblePoints, { 
-                color: '#007bff', weight: 7, opacity: 0.9, lineCap: 'round' 
-            }).addTo(map);
-            routeLine.bringToFront(); // S'assurer que la route est sur la brume
-        }
-    }
-
-    // --- ITINERAIRE ---
-    function fetchRoute(lat, lng) {
-        logStatus("Mise à jour itinéraire...");
-        const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
-        fetch(url).then(r => r.json()).then(data => {
-            if (data.routes && data.routes.length > 0) {
-                const route = data.routes[0];
-                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(route.distance);
-                allRoutePoints = route.geometry.coordinates.map(c => [c[1], c[0]]);
-                routeSteps = route.legs[0].steps;
-                drawVisibleRoute(lat, lng);
-                updatePanel(lat, lng);
-                logStatus("Route chargée.");
-            }
-        }).catch(err => { console.error(err); logStatus("Connexion lente..."); });
-    }
-
     function updatePanel(lat, lng) {
-        if (!routeSteps.length) return;
+        if (routeSteps.length === 0) return;
         let step = routeSteps[currentStepIndex];
-        let dist = L.latLng(lat, lng).distanceTo(L.latLng(step.maneuver.location[1], step.maneuver.location[0]));
-        if (dist < 40 && currentStepIndex < routeSteps.length - 1) {
-            currentStepIndex++; step = routeSteps[currentStepIndex];
+        let stepLoc = L.latLng(step.maneuver.location[1], step.maneuver.location[0]);
+        let dist = L.latLng(lat, lng).distanceTo(stepLoc);
+
+        if (dist < 30 && currentStepIndex < routeSteps.length - 1) {
+            currentStepIndex++;
+            step = routeSteps[currentStepIndex];
+            stepLoc = L.latLng(step.maneuver.location[1], step.maneuver.location[0]);
+            dist = L.latLng(lat, lng).distanceTo(stepLoc);
         }
+
         document.getElementById('top-panel').style.display = 'block';
-        document.getElementById('arrow-emoji').innerText = getEmoji(step.maneuver.modifier);
-        document.getElementById('direction-text').innerText = step.maneuver.instruction || "Suivez la ligne bleue";
-        document.getElementById('step-dist').innerText = Math.round(dist) + " m";
+        document.getElementById('direction-icon').innerText = getEmoji(step.maneuver.modifier);
+        document.getElementById('direction-text').innerText = step.maneuver.instruction || "Suivez la route";
+        document.getElementById('step-dist').innerText = dist > 1000 ? (dist/1000).toFixed(1) + " km" : Math.round(dist) + " m";
+    }
+
+    // --- ROUTAGE ---
+    function calculateRoute(lat, lng) {
+        const url = `${OSRM_BASE_URL}${lng},${lat};${destination.lng},${destination.lat}?geometries=geojson&steps=true&language=fr&overview=full`;
+
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.routes || data.routes.length === 0) return;
+
+                const route = data.routes[0];
+                const remainingMeters = route.distance;
+                document.getElementById('fuzzy-distance').innerText = getFuzzyDistanceText(remainingMeters);
+
+                const geo = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                if (routeLine) map.removeLayer(routeLine);
+                routeLine = L.polyline(geo, { color: '#ff3333', weight: 6, opacity: 0.8, dashArray: '10, 15', lineCap: 'round' }).addTo(map);
+
+                routeSteps = route.legs[0].steps;
+                currentStepIndex = 0;
+
+                if (fogLayer) fogLayer.bringToFront(); // Le brouillard reste au-dessus de la ligne
+            })
+            .catch(e => console.log("Erreur route"));
     }
 
     // --- GPS ---
     function startNavigation() {
         document.getElementById('start-container').style.display = 'none';
-        logStatus("Recherche position...");
         map.locate({ setView: true, maxZoom: 16, watch: true, enableHighAccuracy: true });
     }
 
     function onLocationFound(e) {
         const lat = e.latitude;
         const lng = e.longitude;
-        
-        // 1. Mettre à jour la brume autour de la nouvelle position
-        updateFog(lat, lng);
+        logStatus("Signal GPS OK");
 
-        // 2. Gérer le marqueur
         if (!userMarker) {
             userMarker = L.marker([lat, lng], {icon: arrowIcon, zIndexOffset: 1000}).addTo(map);
-            fetchRoute(lat, lng);
         } else {
             userMarker.setLatLng([lat, lng]);
         }
+        map.panTo([lat, lng], {animate: true, duration: 1.0});
         
-        map.panTo([lat, lng], {animate: true});
-        drawVisibleRoute(lat, lng);
-        updatePanel(lat, lng);
-        
-        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 500) {
-            fetchRoute(lat, lng);
+        // Mise à jour du brouillard blanc
+        updateFog(lat, lng);
+
+        if (!lastPosition || L.latLng(lat, lng).distanceTo(lastPosition) > 40) {
+            calculateRoute(lat, lng);
             lastPosition = L.latLng(lat, lng);
         }
+        updatePanel(lat, lng);
     }
 
     function onLocationError(e) {
-        logStatus("Erreur GPS. Vérifiez l'autorisation.");
+        alert("Erreur : Activez la localisation !");
         document.getElementById('start-container').style.display = 'block';
-        alert("Le GPS ne répond pas.");
     }
 
     map.on('locationfound', onLocationFound);
