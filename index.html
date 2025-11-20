@@ -3,160 +3,468 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mon Maps</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <title>Destination Surprise</title>
     
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* --- RESET --- */
-        body, html {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            overflow: hidden; /* Important : empêche la page entière de scroller */
-        }
-
-        /* --- LA CARTE (Arrière-plan) --- */
-        #map {
-            height: 100%;
-            width: 100%;
+        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #1a1a1a; }
+        #map { height: 100%; width: 100%; z-index: 1; }
+        
+        /* Interface Overlay Styles */
+        .overlay-top {
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 1; /* La carte est tout au fond */
+            right: 0;
+            padding: 1rem;
+            z-index: 1000;
+            pointer-events: none; /* Let clicks pass through to map */
         }
-
-        /* --- BARRE DE RECHERCHE FLOTTANTE --- */
-        .search-container {
-            position: absolute;
-            top: 50px; /* Espace pour la barre d'état du téléphone */
-            left: 20px;
-            right: 20px;
-            z-index: 1000; /* Au-dessus de la carte */
-        }
-
-        .search-box {
-            background: white;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            padding: 12px 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Ombre portée comme Google Maps */
-        }
-
-        .search-box i.fa-bars { color: #555; margin-right: 15px; font-size: 1.2rem; }
-        .search-box i.fa-search { color: #6200ea; font-size: 1.2rem; }
         
-        .search-box input {
-            border: none;
-            outline: none;
-            flex: 1;
-            font-size: 1rem;
-            color: #333;
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            pointer-events: auto;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
-        /* --- FILTRES (Pillules sous la barre) --- */
-        .filters {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-            overflow-x: auto; /* Permet de scroller horizontalement les filtres */
-            padding-bottom: 5px;
-            /* Cache la barre de scroll */
-            scrollbar-width: none; 
-        }
-        .filters::-webkit-scrollbar { display: none; }
-
-        .filter-pill {
-            background: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            white-space: nowrap;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-            color: #444;
-        }
-
-        /* --- BOUTONS D'ACTION FLOTTANTS --- */
-        .fab-container {
+        .overlay-bottom {
             position: absolute;
-            bottom: 100px; /* Au-dessus du menu du bas */
-            right: 20px;
+            bottom: 2rem;
+            left: 0;
+            right: 0;
             z-index: 1000;
             display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .fab {
-            width: 50px;
-            height: 50px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            font-size: 1.2rem;
-            color: #666;
-            cursor: pointer;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            gap: 10px;
         }
-        .fab.primary {
-            background-color: #6200ea;
+
+        .start-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
             color: white;
-            font-size: 1.4rem;
+            padding: 1rem 2rem;
+            border-radius: 9999px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.5);
+            pointer-events: auto;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .start-btn:active { transform: scale(0.95); }
+
+        /* Custom Marker Pulse */
+        .user-pulse {
+            background: #3b82f6;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 0 rgba(59, 130, 246, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
 
-        /* --- MENU DU BAS (Bottom Sheet) --- */
-        .bottom-nav {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            background: white;
-            z-index: 1000;
-            padding: 15px 0;
-            padding-bottom: max(15px, env(safe-area-inset-bottom));
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-around;
-        }
-
-        .nav-item {
-            text-align: center;
-            color: #888;
-            font-size: 0.75rem;
-        }
-        .nav-item.active { color: #6200ea; }
-        .nav-item i {
-            display: block;
-            font-size: 1.3rem;
-            margin-bottom: 4px;
-        }
-
+        /* Hide Leaflet controls slightly */
+        .leaflet-control-attribution { font-size: 8px; opacity: 0.5; }
     </style>
 </head>
 <body>
 
-    <div class="search-container">
-        <div class="search-box">
-            <i class="fas fa-bars"></i>
-            <input type="text" placeholder="Rechercher ici...">
-            <i class="fas fa-search"></i>
+    <!-- HUD Navigation -->
+    <div class="overlay-top" id="nav-panel" style="display: none;">
+        <div class="card p-4 max-w-md mx-auto">
+            <div class="flex items-center gap-4">
+                <div id="maneuver-icon" class="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center text-blue-600 text-xl transition-transform duration-500">
+                    <i class="fas fa-location-arrow"></i>
+                </div>
+                <div class="flex-1">
+                    <h2 id="instruction-text" class="text-lg font-bold text-gray-800 leading-tight">Calcul de l'itinéraire...</h2>
+                    <p id="distance-text" class="text-sm text-gray-500 font-mono mt-1">-- m</p>
+                </div>
+            </div>
         </div>
-        <div class="filters">
-            <div class="filter-pill">Restaurants</div>
-            <div class="filter-pill">Carburant</div>
-            <div class="filter-pill">Hôtels</div>
-            <div class="filter-pill">Pharmacies</div>
+        <div class="mt-2 text-center">
+            <span class="bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-md">
+                Destination inconnue
+            </span>
+        </div>
+        <div id="error-banner" class="hidden mt-2 text-center bg-red-500/80 text-white text-xs py-1 px-2 rounded">
+            Mode Boussole (Réseau faible)
         </div>
     </div>
 
-    <div class="fab-container">
-        <div class="fab" onclick="alert
+    <!-- Start Button / Bottom Controls -->
+    <div class="overlay-bottom">
+        <button id="start-btn" class="start-btn animate-bounce">
+            <i class="fas fa-play mr-2"></i> Commencer l'Aventure
+        </button>
+        
+        <!-- Manual Sim Button (shown if GPS fails) -->
+        <button id="manual-sim-btn" onclick="forceSimulation()" class="hidden pointer-events-auto bg-gray-800 text-white px-4 py-2 rounded-full text-sm border border-gray-600 shadow-lg">
+            <i class="fas fa-robot mr-1"></i> Activer Mode Simulation
+        </button>
+        
+        <div id="stats-panel" class="hidden card px-6 py-3 flex items-center gap-4">
+            <div class="text-center">
+                <div class="text-xs text-gray-400 uppercase">Restant</div>
+                <div id="total-dist" class="font-bold text-gray-800">-- km</div>
+            </div>
+            <div class="h-8 w-px bg-gray-200"></div>
+            <button onclick="recenterMap()" class="w-10 h-10 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200 active:bg-gray-300 pointer-events-auto">
+                <i class="fas fa-crosshairs"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const DESTINATION = { lat: 46.575917, lng: 5.954412 }; // Position surprise
+        const FOG_RADIUS = 1500; // Mètres (Visibilité)
+        
+        // --- STATE ---
+        let map, userMarker, fogLayer, routePolyline;
+        let userPos = null;
+        let navigationStarted = false;
+        let isSimulating = false;
+        let simulationInterval;
+        let useCompassMode = false; // Fallback if API fails
+
+        // --- INITIALIZATION ---
+        function initMap() {
+            // Centré par défaut sur la France avant localisation
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([46.5, 5.9], 6);
+
+            // Dark mode tiles for contrast
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd'
+            }).addTo(map);
+
+            // Initial Fog (Covering everything)
+            drawFog({ lat: 0, lng: 0 }, 0); 
+            
+            // Check for secure context (required for geolocation on modern browsers)
+            if (!window.isSecureContext && location.hostname !== 'localhost' && location.protocol !== 'file:') {
+                alert("Attention : La géolocalisation nécessite une connexion sécurisée (HTTPS). L'application risque de ne pas fonctionner.");
+            }
+        }
+
+        // --- FOG OF WAR LOGIC ---
+        function drawFog(center, radiusMeters) {
+            if (fogLayer) map.removeLayer(fogLayer);
+
+            // Create a polygon that covers the whole world
+            const world = [
+                [90, -180],
+                [90, 180],
+                [-90, 180],
+                [-90, -180]
+            ];
+
+            // Create the hole (circle around user)
+            const hole = [];
+            const points = 64;
+            const radiusDegLat = radiusMeters / 111320; 
+            
+            for (let i = 0; i < points; i++) {
+                const theta = (i / points) * (2 * Math.PI);
+                const x = center.lng + (radiusDegLat * Math.cos(theta)) / Math.cos(center.lat * Math.PI / 180);
+                const y = center.lat + (radiusDegLat * Math.sin(theta));
+                hole.push([y, x]);
+            }
+
+            fogLayer = L.polygon([world, hole], {
+                color: 'transparent',
+                fillColor: '#0f172a', // Dark blue-ish black
+                fillOpacity: 0.95,     // Very opaque
+                interactive: false     // Let clicks pass through
+            }).addTo(map);
+        }
+
+        // --- NAVIGATION LOGIC ---
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-btn').classList.add('hidden');
+            document.getElementById('nav-panel').style.display = 'block';
+            document.getElementById('stats-panel').classList.remove('hidden');
+            document.getElementById('stats-panel').classList.add('flex');
+            navigationStarted = true;
+            startGeolocation();
+        });
+
+        function startGeolocation() {
+            if (isSimulating) {
+                startSimulation();
+                return;
+            }
+
+            if ("geolocation" in navigator) {
+                const options = { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 };
+                navigator.geolocation.watchPosition(
+                    updatePosition,
+                    handleGeoError,
+                    options
+                );
+            } else {
+                handleGeoError({ message: "Géolocalisation non supportée" });
+            }
+        }
+
+        function handleGeoError(err) {
+            console.error("Erreur GPS:", err);
+            document.getElementById('instruction-text').innerText = "Signal GPS introuvable";
+            document.getElementById('distance-text').innerText = "Vérifiez l'autorisation";
+            document.getElementById('manual-sim-btn').classList.remove('hidden');
+        }
+
+        function forceSimulation() {
+            document.getElementById('manual-sim-btn').classList.add('hidden');
+            isSimulating = true;
+            startSimulation();
+        }
+
+        function updatePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            userPos = { lat, lng };
+
+            // Update Map Marker
+            if (!userMarker) {
+                const icon = L.divIcon({
+                    className: 'user-pulse',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                userMarker = L.marker([lat, lng], { icon: icon }).addTo(map);
+                map.setView([lat, lng], 15);
+            } else {
+                userMarker.setLatLng([lat, lng]);
+            }
+
+            // Update Fog
+            drawFog(userPos, FOG_RADIUS);
+
+            // Check Arrival
+            const distToDest = getDistanceFromLatLonInKm(lat, lng, DESTINATION.lat, DESTINATION.lng);
+            if (distToDest < 0.05) { // 50 mètres
+                handleArrival();
+                return;
+            }
+
+            // Navigation Loop
+            if (navigationStarted) {
+                if (useCompassMode) {
+                    updateCompassUI(userPos, distToDest);
+                } else {
+                    getRoute(userPos).catch(err => {
+                        console.warn("Route failed, switching to compass mode", err);
+                        useCompassMode = true;
+                        document.getElementById('error-banner').classList.remove('hidden');
+                        updateCompassUI(userPos, distToDest);
+                    });
+                }
+            }
+        }
+
+        async function getRoute(current) {
+            // OSRM Public Demo Server
+            const url = `https://router.project-osrm.org/route/v1/driving/${current.lng},${current.lat};${DESTINATION.lng},${DESTINATION.lat}?steps=true&geometries=geojson&overview=full&language=fr`;
+
+            const response = await fetch(url, { method: 'GET' });
+            if (!response.ok) throw new Error("Network response was not ok");
+            
+            const data = await response.json();
+
+            if (data.code === 'Ok') {
+                const route = data.routes[0];
+                const steps = route.legs[0].steps;
+                
+                // Update Polyline
+                const coordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                if (routePolyline) map.removeLayer(routePolyline);
+                
+                routePolyline = L.polyline(coordinates, {
+                    color: '#6366f1',
+                    weight: 6,
+                    opacity: 0.7,
+                    lineCap: 'round'
+                }).addTo(map);
+
+                updateUI(route, steps);
+            } else {
+                throw new Error("OSRM API Error code: " + data.code);
+            }
+        }
+
+        function updateUI(route, steps) {
+            const distKm = (route.distance / 1000).toFixed(1);
+            document.getElementById('total-dist').innerText = `${distKm} km`;
+            
+            // Reset rotation from compass mode
+            document.getElementById('maneuver-icon').style.transform = 'rotate(0deg)';
+
+            if (steps.length > 0) {
+                const nextStep = steps[0];
+                // Logic: If close to end of current step, show next one
+                const displayStep = (nextStep.distance < 20 && steps.length > 1) ? steps[1] : nextStep;
+                formatInstruction(displayStep);
+            }
+        }
+
+        function formatInstruction(step) {
+            const modifier = step.maneuver.modifier;
+            const type = step.maneuver.type;
+            const name = step.name || "";
+            const dist = Math.round(step.distance);
+
+            let text = `Continuez sur ${dist}m`;
+            let icon = "fa-arrow-up";
+
+            if (type === 'turn' || type === 'roundabout') {
+                if (modifier && modifier.includes('left')) {
+                    text = `Tournez à Gauche`;
+                    icon = "fa-arrow-left";
+                } else if (modifier && modifier.includes('right')) {
+                    text = `Tournez à Droite`;
+                    icon = "fa-arrow-right";
+                }
+                if (name) text += ` vers ${name}`;
+            } else if (type === 'arrive') {
+                text = "Vous arrivez à la surprise !";
+                icon = "fa-star";
+            }
+
+            document.getElementById('instruction-text').innerText = text;
+            document.getElementById('distance-text').innerText = `Dans ${dist} mètres`;
+            document.getElementById('maneuver-icon').innerHTML = `<i class="fas ${icon}"></i>`;
+        }
+
+        // --- FALLBACK: COMPASS MODE ---
+        // Calculates direct bearing if routing fails
+        function updateCompassUI(current, distKm) {
+            document.getElementById('total-dist').innerText = `${distKm.toFixed(1)} km`;
+            
+            // Calculate bearing
+            const bearing = getBearing(current.lat, current.lng, DESTINATION.lat, DESTINATION.lng);
+            
+            // We assume user is facing North because we don't have device orientation easily in web
+            // So we just show an arrow pointing absolute North-relative direction
+            // Or better: simple arrow "Direction Cible"
+            
+            document.getElementById('instruction-text').innerText = "Suivez la flèche";
+            document.getElementById('distance-text').innerText = "Direction Vol d'Oiseau";
+            
+            // Rotate arrow to point to destination relative to screen up (North)
+            // Note: Ideally we'd use deviceorientation event to rotate map, but here we just give absolute bearing
+            const iconContainer = document.getElementById('maneuver-icon');
+            iconContainer.innerHTML = `<i class="fas fa-location-arrow"></i>`;
+            iconContainer.style.transform = `rotate(${bearing - 45}deg)`; // -45 because fa-location-arrow points 45deg right by default
+        }
+
+        function getBearing(startLat, startLng, destLat, destLng) {
+            const startLatRad = deg2rad(startLat);
+            const startLngRad = deg2rad(startLng);
+            const destLatRad = deg2rad(destLat);
+            const destLngRad = deg2rad(destLng);
+
+            const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
+            const x = Math.cos(startLatRad) * Math.sin(destLatRad) -
+                    Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+            const brng = Math.atan2(y, x);
+            return (rad2deg(brng) + 360) % 360;
+        }
+
+        function handleArrival() {
+            document.getElementById('instruction-text').innerText = "VOUS ÊTES ARRIVÉS !";
+            document.getElementById('instruction-text').classList.add('text-green-600');
+            document.getElementById('maneuver-icon').innerHTML = '<i class="fas fa-gift fa-beat"></i>';
+            document.getElementById('maneuver-icon').classList.remove('bg-blue-100', 'text-blue-600');
+            document.getElementById('maneuver-icon').classList.add('bg-green-100', 'text-green-600');
+            document.getElementById('maneuver-icon').style.transform = 'none';
+            
+            // Remove Fog
+            if (fogLayer) map.removeLayer(fogLayer);
+            map.setView([DESTINATION.lat, DESTINATION.lng], 18);
+            
+            alert("SURPRISE !!! Regardez autour de vous !");
+        }
+
+        function recenterMap() {
+            if (userPos) {
+                map.setView([userPos.lat, userPos.lng], 16);
+            }
+        }
+
+        // --- UTILS ---
+        function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);  
+            var dLon = deg2rad(lon2-lon1); 
+            var a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            var d = R * c; 
+            return d;
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+        function rad2deg(rad) { return rad * (180/Math.PI); }
+
+        // --- SIMULATION MODE ---
+        function toggleSimulation() {
+            isSimulating = !isSimulating;
+            alert(isSimulating ? "Mode Simulation Prêt. Cliquez sur Commencer." : "Mode Simulation Désactivé");
+        }
+
+        function startSimulation() {
+            // Start simulation ~5km away
+            let simLat = 46.55; 
+            let simLng = 5.90;
+            
+            if (simulationInterval) clearInterval(simulationInterval);
+
+            simulationInterval = setInterval(() => {
+                // Move towards destination
+                const dLat = (DESTINATION.lat - simLat) * 0.02;
+                const dLng = (DESTINATION.lng - simLng) * 0.02;
+                
+                simLat += dLat;
+                simLng += dLng;
+                
+                updatePosition({ coords: { latitude: simLat, longitude: simLng } });
+                
+                if (Math.abs(DESTINATION.lat - simLat) < 0.0001) {
+                    clearInterval(simulationInterval);
+                }
+            }, 1000);
+        }
+
+        window.onload = initMap;
+
+    </script>
+</body>
+</html>
