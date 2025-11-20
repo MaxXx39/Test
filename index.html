@@ -3,201 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mon Appli</title>
+    <title>Mon Maps</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <style>
-        /* --- RESET & BASE --- */
-        * {
-            box-sizing: border-box;
+        /* --- RESET --- */
+        body, html {
+            height: 100%;
             margin: 0;
             padding: 0;
-            /* Empêche la sélection de texte comme dans une vraie appli */
-            -webkit-tap-highlight-color: transparent;
-            user-select: none; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden; /* Important : empêche la page entière de scroller */
         }
 
-        body {
-            /* Utilise la police par défaut du téléphone (San Francisco sur iPhone, Roboto sur Android) */
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f4f4f4;
+        /* --- LA CARTE (Arrière-plan) --- */
+        #map {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1; /* La carte est tout au fond */
+        }
+
+        /* --- BARRE DE RECHERCHE FLOTTANTE --- */
+        .search-container {
+            position: absolute;
+            top: 50px; /* Espace pour la barre d'état du téléphone */
+            left: 20px;
+            right: 20px;
+            z-index: 1000; /* Au-dessus de la carte */
+        }
+
+        .search-box {
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Ombre portée comme Google Maps */
+        }
+
+        .search-box i.fa-bars { color: #555; margin-right: 15px; font-size: 1.2rem; }
+        .search-box i.fa-search { color: #6200ea; font-size: 1.2rem; }
+        
+        .search-box input {
+            border: none;
+            outline: none;
+            flex: 1;
+            font-size: 1rem;
             color: #333;
-            height: 100vh;
+        }
+
+        /* --- FILTRES (Pillules sous la barre) --- */
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            overflow-x: auto; /* Permet de scroller horizontalement les filtres */
+            padding-bottom: 5px;
+            /* Cache la barre de scroll */
+            scrollbar-width: none; 
+        }
+        .filters::-webkit-scrollbar { display: none; }
+
+        .filter-pill {
+            background: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            color: #444;
+        }
+
+        /* --- BOUTONS D'ACTION FLOTTANTS --- */
+        .fab-container {
+            position: absolute;
+            bottom: 100px; /* Au-dessus du menu du bas */
+            right: 20px;
+            z-index: 1000;
             display: flex;
             flex-direction: column;
+            gap: 15px;
         }
 
-        /* --- HEADER (HAUT) --- */
-        header {
-            background-color: #6200ea; /* Couleur principale (Violet) */
-            color: white;
-            padding: 15px 20px;
-            padding-top: max(15px, env(safe-area-inset-top)); /* Gestion de l'encoche iPhone */
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-        }
-
-        header h1 {
+        .fab {
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
             font-size: 1.2rem;
-            font-weight: 600;
-        }
-
-        /* --- CONTENU PRINCIPAL --- */
-        main {
-            flex: 1;
-            overflow-y: auto; /* Permet le scroll uniquement ici */
-            padding: 80px 20px 100px 20px; /* Marges pour ne pas être caché par le header/footer */
-        }
-
-        /* Style des "Cartes" de contenu */
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        h2 { font-size: 1.1rem; margin-bottom: 10px; color: #6200ea; }
-        p { line-height: 1.5; font-size: 0.95rem; color: #666; margin-bottom: 10px; }
-
-        /* Bouton style appli */
-        button.app-btn {
-            background: #6200ea;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 25px;
-            width: 100%;
-            font-size: 1rem;
-            font-weight: bold;
+            color: #666;
             cursor: pointer;
-            transition: transform 0.1s;
         }
-        button.app-btn:active { transform: scale(0.98); }
+        .fab.primary {
+            background-color: #6200ea;
+            color: white;
+            font-size: 1.4rem;
+        }
 
-        /* --- NAVIGATION (BAS) --- */
-        nav {
-            background: white;
-            position: fixed;
+        /* --- MENU DU BAS (Bottom Sheet) --- */
+        .bottom-nav {
+            position: absolute;
             bottom: 0;
             width: 100%;
-            border-top: 1px solid #eee;
-            padding-bottom: env(safe-area-inset-bottom); /* Gestion de la barre iPhone */
+            background: white;
+            z-index: 1000;
+            padding: 15px 0;
+            padding-bottom: max(15px, env(safe-area-inset-bottom));
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
             display: flex;
             justify-content: space-around;
-            height: 60px;
-            z-index: 1000;
         }
 
         .nav-item {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #999;
-            text-decoration: none;
+            text-align: center;
+            color: #888;
             font-size: 0.75rem;
-            cursor: pointer;
         }
-
+        .nav-item.active { color: #6200ea; }
         .nav-item i {
-            font-size: 1.2rem;
+            display: block;
+            font-size: 1.3rem;
             margin-bottom: 4px;
         }
-
-        /* État actif */
-        .nav-item.active {
-            color: #6200ea;
-        }
-
-        /* Gestion des Vues (Cacher/Montrer) */
-        .view { display: none; }
-        .view.active { display: block; }
 
     </style>
 </head>
 <body>
 
-    <header>
-        <h1 id="page-title">Accueil</h1>
-    </header>
-
-    <main>
-        <div id="home" class="view active">
-            <div class="card">
-                <h2>Bienvenue !</h2>
-                <p>Ceci est une page web qui se comporte comme une application native.</p>
-                <button class="app-btn" onclick="alert('Action déclenchée !')">Cliquez-moi</button>
-            </div>
-            <div class="card">
-                <h2>Actualités</h2>
-                <p>Le contenu défile derrière la barre de navigation, comme sur Instagram ou Twitter.</p>
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-            </div>
-            <div class="card">
-                <h2>Plus de contenu</h2>
-                <p>Ajoutez autant de cartes que vous voulez pour tester le défilement.</p>
-            </div>
-        </div>
-
-        <div id="search" class="view">
-            <div class="card">
-                <h2>Recherche</h2>
-                <input type="text" placeholder="Rechercher..." style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;">
-            </div>
-        </div>
-
-        <div id="profile" class="view">
-            <div class="card" style="text-align:center;">
-                <i class="fas fa-user-circle" style="font-size: 3rem; color: #6200ea; margin-bottom:10px;"></i>
-                <h2>Mon Profil</h2>
-                <p>Utilisateur Invité</p>
-                <button class="app-btn" style="background:#ff4081;">Se déconnecter</button>
-            </div>
-        </div>
-    </main>
-
-    <nav>
-        <div class="nav-item active" onclick="changeTab('home', this)">
-            <i class="fas fa-home"></i>
-            <span>Accueil</span>
-        </div>
-        <div class="nav-item" onclick="changeTab('search', this)">
+    <div class="search-container">
+        <div class="search-box">
+            <i class="fas fa-bars"></i>
+            <input type="text" placeholder="Rechercher ici...">
             <i class="fas fa-search"></i>
-            <span>Recherche</span>
         </div>
-        <div class="nav-item" onclick="changeTab('profile', this)">
-            <i class="fas fa-user"></i>
-            <span>Profil</span>
+        <div class="filters">
+            <div class="filter-pill">Restaurants</div>
+            <div class="filter-pill">Carburant</div>
+            <div class="filter-pill">Hôtels</div>
+            <div class="filter-pill">Pharmacies</div>
         </div>
-    </nav>
+    </div>
 
-    <script>
-        function changeTab(tabId, element) {
-            // 1. Changer le titre
-            const titles = {
-                'home': 'Accueil',
-                'search': 'Recherche',
-                'profile': 'Mon Profil'
-            };
-            document.getElementById('page-title').innerText = titles[tabId];
-
-            // 2. Cacher toutes les vues et montrer la bonne
-            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-
-            // 3. Mettre à jour la barre de navigation (couleur active)
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            element.classList.add('active');
-        }
-    </script>
-
-</body>
-</html>
+    <div class="fab-container">
+        <div class="fab" onclick="alert
