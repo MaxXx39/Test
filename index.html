@@ -9,35 +9,34 @@
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     
-    <!-- Turf.js pour les calculs géométriques (le masque de 2km et découpe de route) -->
+    <!-- Turf.js -->
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     
-    <!-- FontAwesome pour les icônes -->
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <style>
         body { margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #000; }
         
-        /* La Carte */
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
 
         /* Interface de Navigation (HUD) */
         #hud {
             position: absolute;
             top: 0; left: 0; right: 0;
-            padding: 20px;
-            pointer-events: none; /* Permet de toucher la carte à travers */
+            padding: 10px;
+            pointer-events: none;
             z-index: 10;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
-        /* Bandeau d'instruction (Vert type GPS) */
+        /* Bandeau d'instruction */
         .instruction-panel {
             background-color: #1b8d52;
             color: white;
-            width: 90%;
+            width: 95%;
             max-width: 500px;
             padding: 15px;
             border-radius: 12px;
@@ -45,24 +44,25 @@
             margin-bottom: 10px;
             display: flex;
             align-items: center;
-            min-height: 60px;
+            min-height: 70px;
             pointer-events: auto;
         }
 
-        .direction-icon { font-size: 2rem; margin-right: 15px; width: 40px; text-align: center; }
-        .instruction-text { font-size: 1.2rem; font-weight: bold; line-height: 1.2; }
+        .direction-icon { font-size: 2.2rem; margin-right: 15px; width: 50px; text-align: center; }
+        .instruction-text { font-size: 1.3rem; font-weight: bold; line-height: 1.2; }
 
         /* Info Distance */
         .info-panel {
-            background-color: rgba(30, 30, 30, 0.9);
+            background-color: rgba(20, 20, 20, 0.95);
             color: #fff;
-            padding: 10px 20px;
-            border-radius: 20px;
-            margin-top: 10px;
-            font-size: 1.1rem;
+            padding: 10px 25px;
+            border-radius: 30px;
+            margin-top: 5px;
+            font-size: 1.2rem;
             font-weight: bold;
             backdrop-filter: blur(5px);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
         /* Overlay de Démarrage */
@@ -80,6 +80,31 @@
             box-sizing: border-box;
         }
 
+        /* Selecteur de destination */
+        .select-container {
+            margin-top: 20px;
+            text-align: left;
+            width: 100%;
+            max-width: 300px;
+        }
+        .select-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        select {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
         button.start-btn {
             background: #00d2ff;
             color: #00334d;
@@ -95,24 +120,18 @@
         }
         button.start-btn:active { transform: scale(0.95); }
 
-        /* Indicateur GPS */
         #gps-status { margin-top: 10px; font-size: 0.9rem; color: #aaa; }
 
         /* Popup Reveal */
-        .reveal-popup {
-            text-align: center;
-            color: #333;
-        }
+        .reveal-popup { text-align: center; color: #333; }
         .reveal-popup h1 { color: #d35400; margin: 0 0 5px 0; }
 
-        /* Animation de chargement */
         .loader {
             border: 4px solid rgba(255,255,255,0.3);
             border-radius: 50%;
             border-top: 4px solid #fff;
             width: 20px;
             height: 20px;
-            -webkit-animation: spin 1s linear infinite; /* Safari */
             animation: spin 1s linear infinite;
             display: inline-block;
             vertical-align: middle;
@@ -129,14 +148,23 @@
     <div id="start-overlay">
         <i class="fas fa-route fa-4x" style="margin-bottom: 20px;"></i>
         <h1>Destination Mystère</h1>
-        <p style="max-width: 300px; line-height: 1.5;">
-            Laissez-vous guider. Vous ne verrez que <strong>2km</strong> autour de vous.<br>
-            La destination finale restera secrète jusqu'au dernier moment.
+        <p style="max-width: 300px; line-height: 1.5; margin-bottom:10px;">
+            Sélectionnez votre aventure.<br>
+            Guidage réel. Destination secrète.
         </p>
+
+        <div class="select-container">
+            <label for="destination-select">Choisir le point de chute :</label>
+            <select id="destination-select">
+                <!-- Rempli par JS -->
+            </select>
+        </div>
+
         <div id="gps-check-msg" style="margin-top: 20px; font-weight: bold; color: #ffcc00;">
             <div class="loader"></div> Vérification GPS...
         </div>
-        <button id="btn-start" class="start-btn hidden" onclick="startNavigation()">COMMENCER LE TRAJET</button>
+        
+        <button id="btn-start" class="start-btn hidden" onclick="startNavigation()">C'EST PARTI !</button>
     </div>
 
     <!-- HUD Navigation -->
@@ -146,7 +174,7 @@
             <div id="nav-text" class="instruction-text">Calcul de l'itinéraire...</div>
         </div>
         <div class="info-panel">
-            <i class="fas fa-flag-checkered"></i> Reste : <span id="distance-display">--</span> km
+            <i class="fas fa-flag-checkered"></i> <span id="distance-display">--</span>
         </div>
     </div>
 
@@ -154,32 +182,54 @@
 
     <script>
         // ============================================================
-        // ⚠️ CONFIGURATION
+        // CONFIGURATION
         // ============================================================
         mapboxgl.accessToken = 'pk.eyJ1IjoibWF4eHgzOSIsImEiOiJjbWk4amx6YWMwNTFpMmpzYWVkcjJ0dGJiIn0.UHWEl4YZP3i9BXewfeTzPQ'; 
-        // ============================================================
+        
+        // LISTE DES DESTINATIONS (Format: [Longitude, Latitude])
+        // Attention: Google Maps donne Lat,Long. Mapbox veut Long,Lat. J'ai inversé pour toi.
+        const DESTINATIONS = {
+            'A': { name: 'Destination A (Origine)', coords: [5.954497, 46.575945] },
+            'B': { name: 'Destination B', coords: [6.016325, 46.534054] },
+            'C': { name: 'Destination C', coords: [6.571398, 46.543269] },
+            'D': { name: 'Destination D', coords: [6.125181, 46.242740] },
+            'E': { name: 'Destination E', coords: [6.284471, 46.419906] },
+            'F': { name: 'Destination F', coords: [4.646682, 43.701235] }
+        };
 
-        // Destination : 46.575945, 5.954497 (Bois d'Amont)
-        const DESTINATION = [5.954497, 46.575945]; 
         const VISIBILITY_RADIUS_KM = 2;
 
+        // Variables Globales
+        let currentDestination = DESTINATIONS['A'].coords; // Par défaut
         let map;
         let userPos = null;
         let isRevealed = false;
         let geolocateControl;
         let lastRouteFetchTime = 0;
+        let realDrivingDistanceText = "-- km"; // Pour stocker la vraie distance route
 
-        // --- 1. Vérification initiale du GPS et de la Clé ---
+        // --- 1. Initialisation de la page ---
         window.onload = function() {
+            // Remplir le selecteur
+            const select = document.getElementById('destination-select');
+            for (const [key, value] of Object.entries(DESTINATIONS)) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.text = value.name;
+                select.appendChild(option);
+            }
+
+            // Gestion du changement de destination
+            select.addEventListener('change', (e) => {
+                currentDestination = DESTINATIONS[e.target.value].coords;
+            });
+
+            checkGPS();
+        };
+
+        function checkGPS() {
             const gpsMsg = document.getElementById('gps-check-msg');
             const btnStart = document.getElementById('btn-start');
-
-            // Check si la clé a été changée (simple check de longueur)
-            if (mapboxgl.accessToken.includes('placeholder') || mapboxgl.accessToken.length < 10) {
-                gpsMsg.innerHTML = "⚠️ ERREUR : Clé API manquante.<br>Ouvre le fichier et ajoute ta clé Mapbox ligne 82.";
-                gpsMsg.style.color = "#ff4444";
-                return;
-            }
 
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
@@ -190,30 +240,29 @@
                         btnStart.classList.remove('hidden');
                     },
                     (error) => {
-                        gpsMsg.innerHTML = "❌ GPS désactivé ou refusé.<br>Veuillez l'activer et recharger.";
+                        gpsMsg.innerHTML = "❌ GPS requis. Activez-le.";
                         gpsMsg.style.color = "#ff4444";
                     },
                     { enableHighAccuracy: true }
                 );
             } else {
-                gpsMsg.innerHTML = "Votre navigateur ne supporte pas le GPS.";
+                gpsMsg.innerHTML = "GPS non supporté.";
             }
-        };
+        }
 
-        // --- 2. Lancement de l'application ---
+        // --- 2. Lancement ---
         function startNavigation() {
             document.getElementById('start-overlay').classList.add('hidden');
             document.getElementById('hud').classList.remove('hidden');
             
-            // Empêcher la mise en veille (Screen Wake Lock API)
             if ('wakeLock' in navigator) {
-                try { navigator.wakeLock.request('screen'); } catch (err) { console.log(err); }
+                try { navigator.wakeLock.request('screen'); } catch (err) {}
             }
 
             initMap();
         }
 
-        // --- 3. Initialisation de la Carte ---
+        // --- 3. Carte ---
         function initMap() {
             map = new mapboxgl.Map({
                 container: 'map',
@@ -225,86 +274,71 @@
                 interactive: false 
             });
 
-            map.on('load', () => {
-                // 3.1 Source pour le masque (Brouillard)
-                map.addSource('fog', {
-                    type: 'geojson',
-                    data: generateFogGeoJSON(userPos)
-                });
+            // IMPORTANT : Contrôles en BAS à DROITE pour ne pas gêner le bandeau vert
+            geolocateControl = new mapboxgl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: true,
+                showUserHeading: true
+            });
+            map.addControl(geolocateControl, 'bottom-right');
 
-                // 3.2 Layer noir
+            map.on('load', () => {
+                // Masque (Brouillard)
+                map.addSource('fog', { type: 'geojson', data: generateFogGeoJSON(userPos) });
                 map.addLayer({
                     id: 'fog-layer',
                     type: 'fill',
                     source: 'fog',
-                    paint: {
-                        'fill-color': '#000000',
-                        'fill-opacity': 0.95 // Opacité augmentée pour bien cacher la carte
-                    }
+                    paint: { 'fill-color': '#000000', 'fill-opacity': 0.95 }
                 });
 
-                // 3.3 Source et Layer pour la Route (Ligne bleue)
-                map.addSource('route', {
-                    type: 'geojson',
-                    data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } }
-                });
-                
+                // Route (Ligne)
+                map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
                 map.addLayer({
                     id: 'route-line',
                     type: 'line',
                     source: 'route',
                     layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: {
-                        'line-color': '#3887be',
-                        'line-width': 9,
-                        'line-opacity': 0.8
-                    },
-                    beforeId: 'fog-layer' // On met la route SOUS le brouillard au cas où
+                    paint: { 'line-color': '#3887be', 'line-width': 9, 'line-opacity': 0.8 },
+                    beforeId: 'fog-layer'
                 });
 
-                // 3.4 Contrôle de géolocalisation
-                geolocateControl = new mapboxgl.GeolocateControl({
-                    positionOptions: { enableHighAccuracy: true },
-                    trackUserLocation: true,
-                    showUserHeading: true
-                });
-
-                map.addControl(geolocateControl);
+                // Activation immédiate du suivi
                 geolocateControl.trigger();
 
+                // Boucle de mise à jour
                 geolocateControl.on('geolocate', (e) => {
-                    const lon = e.coords.longitude;
-                    const lat = e.coords.latitude;
-                    const newUserPos = [lon, lat];
-                    
-                    map.easeTo({ pitch: 60 });
+                    const newUserPos = [e.coords.longitude, e.coords.latitude];
+                    map.easeTo({ pitch: 60 }); // Force la 3D
                     updateAppLogic(newUserPos, e.coords.heading);
                 });
             });
         }
 
-        // --- 4. Logique Principale ---
+        // --- 4. Logique ---
         async function updateAppLogic(currentPos, heading) {
             userPos = currentPos;
 
-            // A. Calcul distance restante
+            // Calcul distance vol d'oiseau (Juste pour le "Reveal")
             const from = turf.point(userPos);
-            const to = turf.point(DESTINATION);
-            const distance = turf.distance(from, to, { units: 'kilometers' });
+            const to = turf.point(currentDestination);
+            const directDistance = turf.distance(from, to, { units: 'kilometers' });
             
-            document.getElementById('distance-display').innerText = distance.toFixed(1);
+            // Affichage : On priorise la distance routière si disponible, sinon vol d'oiseau
+            const displayDist = realDrivingDistanceText !== "-- km" ? realDrivingDistanceText : (directDistance.toFixed(1) + " km");
+            document.getElementById('distance-display').innerText = displayDist;
 
-            // B. Mise à jour du Masque
             if (!isRevealed) {
-                const fogGeoJson = generateFogGeoJSON(userPos);
-                map.getSource('fog').setData(fogGeoJson);
+                // Update Masque
+                map.getSource('fog').setData(generateFogGeoJSON(userPos));
 
-                if (distance <= VISIBILITY_RADIUS_KM) {
+                // Check Arrivée
+                if (directDistance <= VISIBILITY_RADIUS_KM) {
                     triggerReveal();
                 }
             }
 
-            // C. Mise à jour Itinéraire (Limite à 1 appel toutes les 2 secondes pour éviter surcharge)
+            // Update Route (max toutes les 2s)
             const now = Date.now();
             if (now - lastRouteFetchTime > 2000) {
                 lastRouteFetchTime = now;
@@ -312,24 +346,15 @@
             }
         }
 
-        // --- 5. Générateur de Masque ---
         function generateFogGeoJSON(center) {
             const worldPolygon = [[[-180, 90], [180, 90], [180, -90], [-180, -90], [-180, 90]]];
             const circle = turf.circle(center, VISIBILITY_RADIUS_KM, { steps: 64, units: 'kilometers' });
-            const hole = circle.geometry.coordinates[0];
-            return {
-                type: 'Feature',
-                geometry: {
-                    type: 'Polygon',
-                    coordinates: [worldPolygon[0], hole]
-                }
-            };
+            return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [worldPolygon[0], circle.geometry.coordinates[0]] } };
         }
 
-        // --- 6. Appel API Routing ---
+        // --- 5. API Route (et Distance Réelle) ---
         async function getRoute(start) {
-            // AJOUT DE overview=full pour avoir la précision maximale du tracé des routes
-            const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${DESTINATION[0]},${DESTINATION[1]}?steps=true&geometries=geojson&overview=full&access_token=${mapboxgl.accessToken}&language=fr`;
+            const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${currentDestination[0]},${currentDestination[1]}?steps=true&geometries=geojson&overview=full&access_token=${mapboxgl.accessToken}&language=fr`;
             
             try {
                 const response = await fetch(url);
@@ -337,32 +362,32 @@
                 
                 if (json.routes && json.routes.length > 0) {
                     const data = json.routes[0];
-                    const fullRouteGeo = data.geometry;
-
-                    // --- MODIFICATION CRUCIALE : COUPER LA ROUTE ---
-                    // On ne passe pas toute la route à la carte, on la coupe à 2km
-                    const visibleRouteGeo = clipRouteByDistance(fullRouteGeo, start, VISIBILITY_RADIUS_KM);
-
-                    if (!isRevealed) {
-                         // Si non révélé, on affiche la route coupée
-                        map.getSource('route').setData({
-                            type: 'Feature', properties: {}, geometry: visibleRouteGeo
-                        });
+                    
+                    // 1. Capturer la vraie distance de conduite
+                    const distMeters = data.distance;
+                    if (distMeters >= 1000) {
+                        realDrivingDistanceText = (distMeters / 1000).toFixed(1) + " km";
                     } else {
-                        // Si révélé, on affiche tout
-                        map.getSource('route').setData({
-                            type: 'Feature', properties: {}, geometry: fullRouteGeo
-                        });
+                        realDrivingDistanceText = Math.floor(distMeters) + " m";
                     }
 
-                    // Instructions
+                    // 2. Gérer le tracé
+                    const fullRouteGeo = data.geometry;
+                    const visibleRouteGeo = isRevealed ? fullRouteGeo : clipRouteByDistance(fullRouteGeo, start, VISIBILITY_RADIUS_KM);
+                    
+                    map.getSource('route').setData({
+                        type: 'Feature', properties: {}, geometry: visibleRouteGeo
+                    });
+
+                    // 3. Instructions
                     if (data.legs && data.legs[0].steps.length > 0) {
                         const step = data.legs[0].steps[0];
                         let instruction = step.maneuver.instruction;
                         let type = step.maneuver.type; 
                         let modifier = step.maneuver.modifier;
 
-                        if (step.distance < 20 && data.legs[0].steps[1]) {
+                        // Si on est très proche de la fin de l'étape actuelle (<30m), on affiche la suivante
+                        if (step.distance < 30 && data.legs[0].steps[1]) {
                             instruction = data.legs[0].steps[1].maneuver.instruction;
                             type = data.legs[0].steps[1].maneuver.type;
                             modifier = data.legs[0].steps[1].maneuver.modifier;
@@ -372,74 +397,43 @@
                         updateIcon(type, modifier);
                     }
                 }
-            } catch (err) {
-                console.error("Erreur itinéraire", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
-        // --- 6b. Fonction pour couper le tracé à X km ---
         function clipRouteByDistance(geometry, userPos, maxDistKm) {
             const coords = geometry.coordinates;
             const visibleCoords = [];
             const userPoint = turf.point(userPos);
-
             for (let i = 0; i < coords.length; i++) {
-                const pt = turf.point(coords[i]);
-                const dist = turf.distance(userPoint, pt, { units: 'kilometers' });
-
-                if (dist <= maxDistKm) {
+                if (turf.distance(userPoint, turf.point(coords[i]), { units: 'kilometers' }) <= maxDistKm) {
                     visibleCoords.push(coords[i]);
-                } else {
-                    // Dès qu'on dépasse 2km, on arrête d'ajouter des points
-                    // Le tracé s'arrêtera net à la limite du "brouillard"
-                    break;
-                }
+                } else { break; }
             }
-
-            return {
-                type: 'LineString',
-                coordinates: visibleCoords
-            };
+            return { type: 'LineString', coordinates: visibleCoords };
         }
 
-        // --- 7. Gestion des Icônes ---
         function updateIcon(type, modifier) {
             const iconEl = document.getElementById('nav-icon');
             let iconClass = "fas fa-arrow-up"; 
-
             if (type === 'turn') {
-                if (modifier && modifier.includes('left')) iconClass = "fas fa-arrow-left";
-                if (modifier && modifier.includes('right')) iconClass = "fas fa-arrow-right";
-                if (modifier && modifier.includes('slight right')) iconClass = "fas fa-arrow-right"; // approximation
-                if (modifier && modifier.includes('slight left')) iconClass = "fas fa-arrow-left";
-            } else if (type === 'roundabout') {
-                iconClass = "fas fa-sync";
-            } else if (type === 'arrive') {
-                iconClass = "fas fa-flag-checkered";
-            }
-
+                if (modifier?.includes('left')) iconClass = "fas fa-arrow-left";
+                else if (modifier?.includes('right')) iconClass = "fas fa-arrow-right";
+            } else if (type === 'roundabout') iconClass = "fas fa-sync";
+            else if (type === 'arrive') iconClass = "fas fa-flag-checkered";
             iconEl.innerHTML = `<i class="${iconClass}"></i>`;
         }
 
-        // --- 8. La Révélation ---
         function triggerReveal() {
             isRevealed = true;
             map.setLayoutProperty('fog-layer', 'visibility', 'none');
-
             new mapboxgl.Marker({ color: 'red', scale: 1.2 })
-                .setLngLat(DESTINATION)
-                .setPopup(new mapboxgl.Popup({ offset: 25 }) 
-                .setHTML('<div class="reveal-popup"><h1>🎉 SURPRISE !</h1><p>Vous êtes arrivé !</p></div>'))
-                .addTo(map)
-                .togglePopup();
-
-            document.getElementById('nav-text').innerText = "DESTINATION EN VUE !";
+                .setLngLat(currentDestination)
+                .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML('<div class="reveal-popup"><h1>🎉 DESTINATION !</h1></div>'))
+                .addTo(map).togglePopup();
+            document.getElementById('nav-text').innerText = "VOUS Y ÊTES !";
             document.getElementById('nav-text').style.color = "#f1c40f";
-            
-            map.dragPan.enable();
-            map.scrollZoom.enable();
-            map.touchZoomRotate.enable();
-            map.flyTo({ center: userPos, zoom: 13, pitch: 0 });
+            map.dragPan.enable(); map.scrollZoom.enable(); map.touchZoomRotate.enable();
+            map.flyTo({ center: currentDestination, zoom: 14, pitch: 0 });
         }
     </script>
 </body>
