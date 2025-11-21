@@ -205,11 +205,10 @@
         let geolocateControl;
         let lastRouteFetchTime = 0;
         let realDrivingDistanceText = "-- km"; 
-        let currentMarker = null; // Pour gérer le marqueur d'arrivée
+        let currentMarker = null; 
 
         // --- 1. Initialisation ---
         window.onload = function() {
-            // Remplir le selecteur
             const select = document.getElementById('destination-select');
             for (const [key, value] of Object.entries(DESTINATIONS)) {
                 const option = document.createElement('option');
@@ -223,18 +222,20 @@
                 const newDestKey = e.target.value;
                 currentDestination = DESTINATIONS[newDestKey].coords;
                 
-                // Réinitialisation complète de l'état "Surprise"
+                // CORRECTION : On vide la distance immédiatement
+                realDrivingDistanceText = "-- km";
+                document.getElementById('distance-display').innerText = "Calcul...";
+                
                 isRevealed = false;
                 
                 if(map && map.getSource('fog')) {
-                    // Remettre le brouillard
                     map.setLayoutProperty('fog-layer', 'visibility', 'visible');
-                    // Enlever le marqueur d'arrivée s'il existe
                     if (currentMarker) { currentMarker.remove(); currentMarker = null; }
-                    // Recalculer la route immédiatement
+                    
                     if(userPos) {
-                        updateAppLogic(userPos, 0); // Force update
+                        // On relance le calcul immédiatement
                         getRoute(userPos); 
+                        updateAppLogic(userPos, 0);
                     }
                 }
             });
@@ -333,6 +334,7 @@
             const to = turf.point(currentDestination);
             const directDistance = turf.distance(from, to, { units: 'kilometers' });
             
+            // Utilise la vraie distance si dispo, sinon fallback sur vol d'oiseau
             const displayDist = realDrivingDistanceText !== "-- km" ? realDrivingDistanceText : (directDistance.toFixed(1) + " km");
             document.getElementById('distance-display').innerText = displayDist;
 
@@ -374,6 +376,9 @@
                     } else {
                         realDrivingDistanceText = Math.floor(distMeters) + " m";
                     }
+                    
+                    // CORRECTION : Mise à jour immédiate de l'UI dès qu'on a la réponse
+                    document.getElementById('distance-display').innerText = realDrivingDistanceText;
 
                     const fullRouteGeo = data.geometry;
                     const visibleRouteGeo = isRevealed ? fullRouteGeo : clipRouteByDistance(fullRouteGeo, start, VISIBILITY_RADIUS_KM);
@@ -428,7 +433,6 @@
             isRevealed = true;
             map.setLayoutProperty('fog-layer', 'visibility', 'none');
             
-            // Stockage du marqueur dans une variable pour pouvoir le supprimer si changement de destination
             currentMarker = new mapboxgl.Marker({ color: 'red', scale: 1.2 })
                 .setLngLat(currentDestination)
                 .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML('<div class="reveal-popup"><h1>🎉 DESTINATION !</h1></div>'))
