@@ -30,12 +30,13 @@
 
         /* Animation de pulsation pour la zone de révélation */
         @keyframes pulse-reveal {
-            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
-            70% { box-shadow: 0 0 0 20px rgba(255, 255, 255, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } /* Utiliser le vert revele */
+            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
         .pulsing-marker {
             animation: pulse-reveal 1.5s infinite;
+            border-radius: 50%; /* Pour le circleMarker de Leaflet */
         }
     </style>
     <!-- Leaflet CSS -->
@@ -50,17 +51,17 @@
     <div id="fog-of-war" class="opacity-100"></div>
 
     <!-- Interface Utilisateur (UI Overlay) -->
-    <div id="ui-overlay" class="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none">
+    <div id="ui-overlay" class="absolute inset-0 flex flex-col justify-between p-4 pb-12 pointer-events-none">
 
         <!-- Bannière d'Instructions (F.3) -->
         <div id="instruction-banner" class="w-full pointer-events-auto">
-            <div class="bg-gray-800/90 backdrop-blur-sm rounded-xl p-3 flex items-center justify-center space-x-4 shadow-2xl">
+            <div class="bg-gray-800/90 backdrop-blur-sm rounded-xl p-3 flex items-center justify-center space-x-4 shadow-2xl mx-auto max-w-sm">
                 <!-- Icône directionnelle -->
-                <svg id="direction-icon" class="instruction-icon text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg id="direction-icon" class="instruction-icon text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
                 <!-- Texte de l'instruction -->
-                <p id="instruction-text" class="text-lg font-bold text-center">Recherche de position GPS...</p>
+                <p id="instruction-text" class="text-lg font-bold text-center flex-grow">Recherche de position GPS...</p>
             </div>
         </div>
 
@@ -97,9 +98,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-2Pmvv0kuTBOenSvLm6bvfR4k6i5Pq6q1AT6N9bA==" crossorigin=""></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        // Utiliser window.onload pour garantir que tous les éléments DOM et Leaflet sont chargés
+        window.onload = () => {
             // --- CONFIGURATION ---
-            const DESTINATION_COORDS = [46.575945, 5.954497]; // Coordonnées de la destination mystère (F.1)
+            // Coordonnées de la destination mystère (F.1) - Utilisé l'emplacement de Dole, Jura, France pour un exemple centré
+            const DESTINATION_COORDS = [47.0877, 5.4920]; 
             const FOG_REVEAL_DISTANCE_KM = 2; // Rayon de révélation pour le brouillard et la destination (F.2 / Condition)
             const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/driving/';
             const UPDATE_INTERVAL_MS = 10000; // Intervalle de mise à jour de l'itinéraire (10 secondes)
@@ -113,8 +116,8 @@
             let currentLongitude = null;
             let isRevealed = false;
             let isPaused = false;
-            let watchId;
-            let routingInterval;
+            let watchId = null; // Initialisé à null
+            let routingInterval = null; // Initialisé à null
             let lastInstruction = "";
             let currentRouteDistance = 0;
 
@@ -125,14 +128,18 @@
             const revelationMessageEl = document.getElementById('revelation-message');
             const pauseButton = document.getElementById('pause-button');
             const stopButton = document.getElementById('stop-button');
+            const mapContainer = document.getElementById('map');
 
             // --- INITIALISATION DE LA CARTE ---
             function initMap() {
                 // Initialisation de la carte (coordonnées par défaut au centre de la France avant GPS)
                 map = L.map('map', {
                     zoomControl: false,
-                    attributionControl: false
-                }).setView([46.2276, 2.2137], 6); // Vue initiale
+                    attributionControl: false,
+                    // Vue initiale centrée sur la destination, mais avec un zoom éloigné pour le mystère
+                    center: DESTINATION_COORDS, 
+                    zoom: 6 
+                });
                 
                 // Ajout des tuiles OpenStreetMap
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -149,59 +156,68 @@
                 }).addTo(map);
                 
                 // Marqueur de destination (caché initialement)
-                // Le marquer est ajouté mais invisible par défaut
                 destinationMarker = L.circleMarker(DESTINATION_COORDS, {
                     radius: 8,
                     color: '#f87171',
                     fillColor: '#ef4444',
                     fillOpacity: 0.7,
                     opacity: 0, // Initiallement invisible
-                    pane: 'markerPane' // Assure que le marqueur est au-dessus de la ligne
+                    pane: 'markerPane' 
                 }).addTo(map);
 
-                // Configuration du suivi du GPS (Centrage carte)
-                map.on('locationfound', onLocationFound);
+                // Gère la mise à jour du brouillard lors du zoom ou du déplacement
+                map.on('moveend zoomend', updateFogOfWar); 
             }
 
             // --- LOGIQUE DU BROUILLARD DE GUERRE (F.2) ---
             function updateFogOfWar() {
                 if (isRevealed) {
-                    fogOfWarEl.style.opacity = '0'; // Disparition du brouillard après révélation
+                    fogOfWarEl.style.opacity = '0'; // Disparition totale
                     return;
                 }
                 
                 if (!currentLatitude) return;
 
-                // 1. Conversion du rayon de 2km en pixels à l'écran
-                // Ceci nécessite une conversion complexe LatLng -> Point -> Pixels
-                // Nous allons utiliser la fonction de conversion de Leaflet
+                // 1. Obtenir le point de l'utilisateur sur le conteneur de la carte (en pixels)
+                const userLatLng = L.latLng(currentLatitude, currentLongitude);
+                const userPoint = map.latLngToContainerPoint(userLatLng);
                 
-                // 1.1 Obtenir le point de l'utilisateur sur le conteneur de la carte (en pixels)
-                const userPoint = map.latLngToContainerPoint([currentLatitude, currentLongitude]);
-                
-                // 1.2 Obtenir le point situé à 2km à l'est de l'utilisateur (approx.)
-                const point2kmEast = L.latLng(currentLatitude, currentLongitude).destinationPoint(90, FOG_REVEAL_DISTANCE_KM * 1000);
+                // 2. Calculer la distance en pixels pour 2km à la latitude actuelle
+                // Nous créons un point temporaire 2km à l'est et trouvons son équivalent en pixels
+                const point2kmEast = userLatLng.destinationPoint(90, FOG_REVEAL_DISTANCE_KM * 1000);
                 const point2kmEastScreen = map.latLngToContainerPoint(point2kmEast);
 
-                // 1.3 Calculer le rayon en pixels
+                // Calculer le rayon en pixels
                 const pixelRadius = Math.abs(point2kmEastScreen.x - userPoint.x);
 
-                // 1.4 Centrer le clip-path sur le point utilisateur (relatif au viewport)
-                const containerRect = map.getContainer().getBoundingClientRect();
-                const mapLeft = containerRect.left;
-                const mapTop = containerRect.top;
-                
-                const userX = userPoint.x - mapLeft;
-                const userY = userPoint.y - mapTop;
+                // 3. Centrer le clip-path sur le point utilisateur (relatif au conteneur de la carte)
+                const userX = userPoint.x;
+                const userY = userPoint.y;
 
                 // Appliquer le clip-path CSS (masque circulaire)
                 fogOfWarEl.style.clipPath = `circle(${pixelRadius}px at ${userX}px ${userY}px)`;
+
+                // Assurer que le brouillard est visible s'il n'est pas révélé
+                fogOfWarEl.style.opacity = '1';
             }
 
             // --- GESTION DE LA POSITION GPS (F.2, Centrage) ---
             function startGeolocation() {
+                if (!navigator.geolocation) {
+                    instructionTextEl.textContent = "Géolocalisation non supportée par votre navigateur.";
+                    return;
+                }
+
+                // Vérifier si la page est sécurisée (HTTPS)
+                if (window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+                    instructionTextEl.textContent = "ATTENTION : Le GPS nécessite HTTPS. La position ne sera peut-être pas trouvée.";
+                    speakInstruction("Attention, la géolocalisation haute précision nécessite une connexion sécurisée H T T P S.");
+                }
+
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
+                        if (isPaused) return; // Ne pas traiter les mises à jour si en pause
+
                         currentLatitude = position.coords.latitude;
                         currentLongitude = position.coords.longitude;
                         const latLng = [currentLatitude, currentLongitude];
@@ -209,27 +225,41 @@
                         // Mettre à jour la position du marqueur utilisateur
                         userMarker.setLatLng(latLng);
 
-                        // Centrer la carte sur l'utilisateur (F.2/Centrage carte)
-                        map.setView(latLng, map.getZoom() < 14 ? 14 : map.getZoom()); // Zoom par défaut à 14
+                        // Centrer la carte sur l'utilisateur et ajuster le zoom
+                        map.setView(latLng, map.getZoom() < 16 ? 16 : map.getZoom()); 
 
                         // Mettre à jour le brouillard
                         updateFogOfWar();
                         
                         // Si l'itinéraire n'a pas encore été tracé, le faire
-                        if (!routePolyline) {
-                            startRouting();
-                            routingInterval = setInterval(updateRouteAndInstructions, UPDATE_INTERVAL_MS);
+                        if (!routingInterval) {
+                            updateRouteAndInstructions(true);
+                            routingInterval = setInterval(() => updateRouteAndInstructions(false), UPDATE_INTERVAL_MS);
                         }
                     },
                     (error) => {
                         console.error("Erreur de géolocalisation:", error);
-                        instructionTextEl.textContent = "Erreur GPS. Vérifiez les permissions.";
-                        speakInstruction("Erreur de géolocalisation. Veuillez vérifier les permissions de votre navigateur.");
+                        let errorMessage = "Erreur GPS inconnue.";
+
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = "PERMISSION REFUSÉE. Activez la géolocalisation et réessayez.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = "Position non disponible. Essayez à l'extérieur.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = "Délai de recherche GPS dépassé.";
+                                break;
+                        }
+
+                        instructionTextEl.textContent = errorMessage;
+                        speakInstruction(errorMessage);
                     },
                     {
                         enableHighAccuracy: true,
                         maximumAge: 5000,
-                        timeout: 10000
+                        timeout: 15000 // Augmenté le timeout pour les connexions lentes
                     }
                 );
             }
@@ -241,12 +271,19 @@
              * @param {boolean} isInitialCall Indique si c'est le premier appel de routage.
              */
             async function updateRouteAndInstructions(isInitialCall = false) {
-                if (isPaused || !currentLatitude) return;
+                if (isPaused || !currentLatitude || isRevealed) {
+                    // Si on est révélé, on continue juste à centrer la carte sans faire d'appels OSRM
+                    if (isRevealed) {
+                        checkArrival();
+                    }
+                    return;
+                }
 
                 const start = `${currentLongitude},${currentLatitude}`;
                 const end = `${DESTINATION_COORDS[1]},${DESTINATION_COORDS[0]}`; // OSRM utilise [Lng, Lat]
 
-                const url = `${OSRM_API_URL}${start};${end}?overview=full&steps=true&geometries=geojson`;
+                // Utilisation de la version en français des instructions
+                const url = `${OSRM_API_URL}${start};${end}?overview=full&steps=true&geometries=geojson&language=fr`; 
 
                 try {
                     const response = await fetch(url);
@@ -265,7 +302,8 @@
                     if (routePolyline) {
                         map.removeLayer(routePolyline);
                     }
-                    routePolyline = L.polyline(routeCoordinates, { color: isRevealed ? '#3b82f6' : '#9ca3af', weight: 6, opacity: 0.7 }).addTo(map);
+                    // Route invisible tant que la destination n'est pas révélée
+                    routePolyline = L.polyline(routeCoordinates, { color: '#9ca3af', weight: 6, opacity: 0.7 }).addTo(map);
 
                     // 2. Mise à jour de la distance restante (F.4)
                     const formattedDistance = currentRouteDistance.toFixed(2);
@@ -298,6 +336,32 @@
                 }
             }
 
+            // --- VERIFICATION D'ARRIVEE ---
+            function checkArrival() {
+                if (!currentLatitude) return;
+
+                const userLatLng = L.latLng(currentLatitude, currentLongitude);
+                const destinationLatLng = L.latLng(DESTINATION_COORDS);
+                const distanceMeters = userLatLng.distanceTo(destinationLatLng);
+                const distanceKm = distanceMeters / 1000;
+
+                distanceCounterEl.textContent = `${distanceKm.toFixed(2)} km RESTANTS`;
+
+                if (distanceMeters < 50) { // Moins de 50 mètres
+                    instructionTextEl.textContent = "FÉLICITATIONS ! Vous êtes arrivé à la destination surprise !";
+                    distanceCounterEl.textContent = "ARRIVÉE !";
+                    speakInstruction("Félicitations ! Vous êtes arrivé à la destination surprise !");
+                    stopNavigation();
+                    // Ajout d'une vibration (si supporté par le mobile)
+                    if (navigator.vibrate) {
+                        navigator.vibrate([200, 100, 200]);
+                    }
+                } else if (isRevealed && distanceKm < 1) {
+                    // Instruction de proximité finale pour aider à la recherche
+                    instructionTextEl.textContent = "Vous êtes à moins d'un kilomètre. Cherchez attentivement !";
+                }
+            }
+
             // --- REVELATION (Action de Révélation) ---
             function revealDestination() {
                 isRevealed = true;
@@ -308,10 +372,11 @@
                 destinationMarker.getElement().classList.add('pulsing-marker'); // Ajouter l'effet de pulsation
                 destinationMarker.bindPopup("Destination Mystère !").openPopup();
 
-                // 2. Retirer le brouillard de guerre
+                // 2. Retirer le brouillard de guerre (déjà fait par updateFogOfWar)
                 fogOfWarEl.style.opacity = '0';
+                fogOfWarEl.style.clipPath = 'none';
 
-                // 3. Mettre à jour le tracé de la route
+                // 3. Mettre à jour le tracé de la route pour le rendre vert/visible
                 if (routePolyline) {
                     routePolyline.setStyle({ color: '#10b981' });
                 }
@@ -327,10 +392,22 @@
             function speakInstruction(text) {
                 if (synth.speaking || isPaused) return;
 
+                // Attendre que les voix soient chargées
+                if (synth.getVoices().length === 0) {
+                    synth.onvoiceschanged = () => {
+                        performSpeak(text);
+                    };
+                } else {
+                    performSpeak(text);
+                }
+            }
+
+            function performSpeak(text) {
                 const utterance = new SpeechSynthesisUtterance(text);
-                // Utiliser une voix française si disponible
                 const voices = synth.getVoices();
+                // Utiliser une voix française si disponible
                 const frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
+                
                 if (frenchVoice) {
                     utterance.voice = frenchVoice;
                 }
@@ -340,30 +417,53 @@
 
             // --- MISE À JOUR DES ICÔNES DIRECTIONNELLES ---
             function updateDirectionIcon(type, modifier) {
-                let path = 'M14 5l7 7m0 0l-7 7m7-7H3'; // Flèche droite par défaut
+                let path = 'M14 5l7 7m0 0l-7 7m7-7H3'; // Flèche droite par défaut (utiliser un type plus neutre)
 
                 // Mettre à jour l'icône SVG en fonction du type et du modificateur OSRM
                 switch (type) {
                     case 'turn':
                     case 'new name':
                     case 'depart':
-                    case 'arrive':
                         if (modifier.includes('left') || modifier.includes('sharp left')) {
                             path = 'M15 19l-7-7 7-7'; // Gauche
                         } else if (modifier.includes('right') || modifier.includes('sharp right')) {
                             path = 'M9 5l7 7-7 7'; // Droite
-                        } else if (modifier.includes('straight')) {
+                        } else if (modifier.includes('straight') || modifier.includes('slight right') || modifier.includes('slight left')) {
                             path = 'M12 5v14'; // Tout droit
+                        } else if (modifier.includes('uturn')) {
+                            path = 'M12 19V5M5 12h14M8 9l-3 3 3 3M16 9l3 3-3 3'; // U-Turn (générique)
                         }
                         break;
                     case 'rotary':
                     case 'roundabout':
-                        path = 'M11 15.5H7.5A4.5 4.5 0 013 11V5.5m0 0l-2 2.5m2-2.5l2 2.5m16 0H12m7 0v7.5A4.5 4.5 0 0115.5 19H12m0 0l2 2m-2-2l-2 2'; // Rond-point (simplifié)
+                        path = 'M15 9l-3-3m0 0l-3 3m3-3v14m0-7h7m0 0l-3 3m3-3l-3-3'; // Rond-point (simplifié)
                         break;
-                    // ... ajouter plus de cas au besoin
+                    case 'arrive':
+                        path = 'M17.657 16.657L13.414 12.414a2 2 0 10-2.828 2.828l4.243 4.243zm-4.243-4.243L19 7m-4-7v4M5 11h4m3 0H5a7 7 0 1114 0z'; // Étoile ou drapeau
+                        break;
+                    // ...
                 }
                 
                 directionIconEl.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="${path}" />`;
+            }
+
+            // Fonction pour arrêter complètement la navigation
+            function stopNavigation() {
+                if (watchId) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                if (routingInterval) {
+                    clearInterval(routingInterval);
+                    routingInterval = null;
+                }
+                if (routePolyline) {
+                    map.removeLayer(routePolyline);
+                    routePolyline = null;
+                }
+                // Optionnel : Retirer les marqueurs pour un arrêt propre
+                // map.removeLayer(userMarker);
+                // map.removeLayer(destinationMarker);
             }
 
             // --- GESTION DES BOUTONS D'ACTION ---
@@ -373,13 +473,13 @@
                 isPaused = !isPaused;
                 if (isPaused) {
                     pauseButton.innerHTML = `<svg class="w-6 h-6 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132c.15-.1.225-.213.225-.333s-.075-.233-.225-.333z" /></svg> Reprendre`;
-                    clearInterval(routingInterval);
+                    if (routingInterval) clearInterval(routingInterval);
                     instructionTextEl.textContent = "Navigation en PAUSE.";
                     speakInstruction("Navigation en pause.");
                 } else {
                     pauseButton.innerHTML = `<svg class="w-6 h-6 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Pause`;
                     updateRouteAndInstructions(); // Mettre à jour immédiatement
-                    routingInterval = setInterval(updateRouteAndInstructions, UPDATE_INTERVAL_MS);
+                    routingInterval = setInterval(() => updateRouteAndInstructions(false), UPDATE_INTERVAL_MS);
                     instructionTextEl.textContent = "Navigation reprise.";
                     speakInstruction("Navigation reprise.");
                 }
@@ -387,29 +487,26 @@
 
             // Bouton Arrêter
             stopButton.addEventListener('click', () => {
-                if (watchId) {
-                    navigator.geolocation.clearWatch(watchId);
-                }
-                if (routingInterval) {
-                    clearInterval(routingInterval);
-                }
-                if (routePolyline) {
-                    map.removeLayer(routePolyline);
-                }
+                stopNavigation();
+
                 fogOfWarEl.style.clipPath = 'none';
                 fogOfWarEl.style.opacity = '0';
                 instructionTextEl.textContent = "Navigation ARRÊTÉE.";
                 distanceCounterEl.textContent = "0.00 km";
                 revelationMessageEl.classList.add('hidden');
                 speakInstruction("Navigation arrêtée.");
-                // Réinitialiser les marqueurs si nécessaire, ou laisser l'utilisateur explorer
+
+                // On remet le marqueur de destination en invisible pour la prochaine fois
+                destinationMarker.setStyle({ opacity: 0 });
+                destinationMarker.getElement().classList.remove('pulsing-marker');
+                isRevealed = false;
             });
 
 
             // --- DÉMARRAGE DE L'APPLICATION ---
             initMap();
             startGeolocation();
-        });
+        };
     </script>
     
 </body>
